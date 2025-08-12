@@ -11,7 +11,6 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
 
 def posting_toggle_keyboard(posting: dict) -> InlineKeyboardMarkup:
     community_enabled = posting.get("community_posting", False)
-
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=f"{'✅' if community_enabled else '❌'} Постинг в community {'вкл' if community_enabled else 'выкл'}",
