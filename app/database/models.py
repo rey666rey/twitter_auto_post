@@ -18,9 +18,9 @@ class User(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     tg_id: Mapped[int] = mapped_column(BIGINT)
     settings: Mapped[dict] = mapped_column(JSON, nullable=True)
+    tweets: Mapped[dict] = mapped_column(JSON, nullable=True)
 
     accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
-
 
 # Модель аккаунта (например, Twitter-аккаунт)
 class Account(Base):

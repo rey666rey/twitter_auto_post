@@ -32,9 +32,7 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
                                             text=f"Постинг: ℹ️ {nickname}: Уже залогинен")
             settings = await rq.get_user_settings(tg_id)
             community_status = settings.get('posting', {}).get('community_posting')
-            media_status = settings.get('posting', {}).get('media')
-            ai_status = settings.get('posting',{}).get('ai')
-            await tweet.post(account.proxy, account.session, account.user_agent, community = community_status, media=media_status, neuro_tweets=ai_status)
+            await tweet.post(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, community = community_status)
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"Постинг: ✅ {nickname}: Пост отправлен")
         except Exception as e:
@@ -42,76 +40,6 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
                                         text=f"❌ Постинг: {nickname}: Ошибка — {e}")
             raise
 
-        await asyncio.sleep(2)  # Хуманизация
-
-async def work_replying_only(tg_id: int, bot: Bot, chat_id: int, message_id: int):
-    accounts = await rq.get_user_accounts(tg_id)
-    settings = await rq.get_user_settings(tg_id)
-    target_count = settings.get('replying', {}).get("count", 1)
-
-    if not accounts:
-        await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                    text=f"Реплаинг: [!] Нет аккаунтов для реплаинга")
-        return
-
-    for account in accounts:
-        if not account.session:
-            try:
-                await tweet.auth(account.nickname, account.password, account.proxy, account.token)
-                # Обновляем account из базы, чтобы получить свежие session и user_agent
-                account = await rq.get_account_by_nickname(account.nickname)
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=f"Реплаинг:✅ Успешно залогинились {account.nickname}"
-                )
-            except Exception as e:
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=f"Реплаинг:❌ Ошибка логина {account.nickname}: {e}"
-                )
-                raise
-        try:
-            await tweet.making_replies(proxy=account.proxy, session=account.session, user_agent=account.user_agent, target_post_count=target_count)
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"😘 Реплаинг выполнен для {account.nickname}")
-        except Exception as e:
-            await bot.edit_message_text(chat_id=chat_id, text=f"❌ Ошибка реплаинга у {account.nickname}: {e}.\n Задачи приостановлены")
-            raise
-
-async def work_liking_only(tg_id: int, bot: Bot, chat_id: int, message_id: int):
-    accounts = await rq.get_user_accounts(tg_id)
-    if not accounts:
-        await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                    text="Лайкинг: ⚠️ Нет аккаунтов для лайкинга")
-        return
-
-    for account in accounts:
-        nickname = account.nickname
-        try:
-            if not account.session:
-                await tweet.auth(account.nickname, account.password, account.proxy, account.token)
-                # Обновляем данные после логина
-                account = await rq.get_account_by_nickname(account.nickname)
-                await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                            text=f"Лайкинг:✅ {nickname}: Успешный вход")
-            else:
-                await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                            text=f"Лайкинг:ℹ️ {nickname}: Уже залогинен")
-
-            settings = await rq.get_user_settings(tg_id)
-            post_count = settings.get('liking', {}).get('post_to_interact_count')
-            target_hours = settings.get('liking', {}).get('interval_hours')
-
-            await tweet.liking(proxy=account.proxy, session=account.session, user_agent=account.user_agent, post_count=post_count, target_hours=target_hours)
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"Лайкинг:✅ {nickname}: лайк отправлен")
-
-        except Exception as e:
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"Лайкинг:❌ {nickname}: Ошибка — {e}")
-            raise
         await asyncio.sleep(2)  # Хуманизация
 
 async def task_worker(tg_id: int, bot: Bot, chat_id: int, queue: asyncio.Queue, messages_to_delete):
@@ -198,9 +126,7 @@ async def start_tasks(
     bot: Bot,
     chat_id: int,
     messages_to_delete: list[int],  # Передаем список всех сообщений для удаления
-    post_msg_id: Optional[int] = None,
-    like_msg_id: Optional[int] = None,
-    reply_msg_id: Optional[int] = None
+    post_msg_id: Optional[int] = None
 ):
     settings = await rq.get_user_settings(tg_id)
     if not settings:
@@ -208,17 +134,10 @@ async def start_tasks(
         return
 
     post_interval = settings.get('posting', {}).get('interval_hours', 1) * 3600
-    like_interval = settings.get('liking', {}).get('interval_hours', 3) * 3600
-    reply_interval = settings.get('replying', {}).get('interval_hours', 2) * 3600
 
     queue = asyncio.Queue()
 
-    if post_msg_id is not None:
-        await queue.put(ScheduledTask(work_posting_only, "Постинг", post_interval, post_msg_id))
-    if like_msg_id is not None:
-        await queue.put(ScheduledTask(work_liking_only, "Лайкинг", like_interval, like_msg_id))
-    if reply_msg_id is not None:
-        await queue.put(ScheduledTask(work_replying_only, "Реплаинг", reply_interval, reply_msg_id))
+    await queue.put(ScheduledTask(work_posting_only, "Постинг", post_interval, post_msg_id))
 
     # Запускаем воркер
     worker_task = asyncio.create_task(task_worker(tg_id, bot, chat_id, queue, messages_to_delete))

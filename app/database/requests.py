@@ -3,6 +3,7 @@ from app.database.models import async_session, Account, User
 from config import DEFAULT_SETTINGS
 from sqlalchemy.orm.attributes import flag_modified
 import re
+import random
 
 async def get_user_accounts(tg_id: int) -> list[Account]:
     """
@@ -80,7 +81,7 @@ async def edit_user_setting(tg_id: int, category: str, updates: dict) -> bool:
         return True
 
 async def add_or_update_accounts(tg_id: int, accounts_data: list[str]) -> int:
-    ACCOUNT_LINE_REGEX = re.compile(r"^(?P<nickname>[^:]+):(?P<email>[^:]+):(?P<password>[^:]+):(?P<proxy>http[s]?://[^:]+:[^@]+@[^:]+:\d+):(?P<token>.+)$")
+    account_line_regex = re.compile(r"^(?P<nickname>[^:]+):(?P<email>[^:]+):(?P<password>[^:]+):(?P<proxy>https?://[^:]+:[^@]+@[^:]+:\d+):(?P<token>.+)$")
     processed = 0
 
     async with async_session() as session:
@@ -90,7 +91,7 @@ async def add_or_update_accounts(tg_id: int, accounts_data: list[str]) -> int:
             return 0
 
         for line in accounts_data:
-            match = ACCOUNT_LINE_REGEX.match(line.strip())
+            match = account_line_regex.match(line.strip())
             if not match:
                 continue  # пропускаем, если формат неверный
 
@@ -120,6 +121,72 @@ async def add_or_update_accounts(tg_id: int, accounts_data: list[str]) -> int:
         await session.commit()
 
     return processed
+
+async def save_user_tweets(tg_id: int, new_tweets: list) -> int:
+    """
+    Сохраняет новые твиты пользователя и возвращает количество уникальных добавленных твитов.
+    """
+    async with async_session() as session:
+        async with session.begin():
+            result = await session.execute(select(User).where(User.tg_id == tg_id))
+            user = result.scalar_one_or_none()
+
+            if not user:
+                print(f"⚠️ Пользователь с tg_id={tg_id} не найден")
+                return 0
+
+            existing_tweets = user.tweets or []
+            if isinstance(existing_tweets, dict):
+                existing_tweets = list(existing_tweets.values())
+
+            existing_set = set(existing_tweets)
+            new_set = set(new_tweets)
+
+            # Определяем, что реально новое
+            unique_new = new_set - existing_set
+
+            # Объединяем
+            combined = list(existing_set | new_set)
+            user.tweets = combined
+
+            return len(unique_new)
+
+async def get_random_tweet(tg_id: int) -> str | None:
+    async with async_session() as session:
+        result = await session.execute(select(User).where(User.tg_id == tg_id))
+        user = result.scalar_one_or_none()
+        if not user or not user.tweets:
+            return None
+
+        tweets_collection = user.tweets
+        if isinstance(tweets_collection, dict):
+            tweets_list = list(tweets_collection.values())
+        elif isinstance(tweets_collection, list):
+            tweets_list = tweets_collection
+        else:
+            return None
+
+        if not tweets_list:
+            return None
+
+        tweet = random.choice(tweets_list)
+
+        # Декодируем unicode-escape
+        # Если tweet — строка с unicode escape последовательностями
+        broken_text = tweet.encode('windows-1252').decode('utf-8')
+        decoded_tweet = broken_text.encode('utf-8').decode('unicode-escape')
+
+        return decoded_tweet
+
+async def get_saved_tweets(tg_id: int) -> dict | None:
+    async with async_session() as session:
+        result = await session.execute(
+            select(User).where(User.tg_id == tg_id)
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            return user.tweets
+        return None
 
 async def get_account_count(tg_id: int) -> int:
     """
