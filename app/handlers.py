@@ -75,9 +75,7 @@ async def start_work(message: Message):
 async def edit_schedule(message: Message):
     tg_id = message.from_user.id
     settings = await rq.get_user_settings(tg_id)
-    posting = settings.get('posting', {})
     accounts_count = await rq.get_account_count(tg_id)
-    posts_count = await rq.get_saved_tweets(tg_id)
 
     if not settings:
         await message.answer("⚠️ Настройки для вас не найдены.")
@@ -85,7 +83,7 @@ async def edit_schedule(message: Message):
 
     text = "⚙️ Ваши текущие настройки:\n\n"
 
-    post_interval = posting.get('interval_hours', 'не установлено')
+    post_interval = settings.get('posting', {'interval_hours'})
     text += (
         f"📤 Постинг:\n"
         f"• Интервал: {post_interval} час\n\n"
@@ -93,7 +91,6 @@ async def edit_schedule(message: Message):
 
     text += (
         f"🗂 Привязанные аккаунты: {accounts_count}\n\n"
-        f"⚡️ Количество уникальных твитов - {len(posts_count)}\n\n"
         f"🛠 Чтобы изменить любую настройку — выберите нужный пункт в меню."
     )
 

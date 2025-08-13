@@ -1,42 +1,18 @@
-# Используем официальный образ Python 3.13
-FROM python:3.13-slim
+# Базовый образ с Python и Playwright
+FROM mcr.microsoft.com/playwright/python:v1.45.0-jammy
 
-# Устанавливаем необходимые системные зависимости
-RUN apt-get update && apt-get install -y \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libnss3 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libgtk-3-0 \
-    libxss1 \
-    libxtst6 \
-    xdg-utils \
-    wget \
-    ca-certificates \
-    fonts-liberation \
-    libappindicator3-1 \
-    libu2f-udev \
-    libvulkan1 \
-    libnss3 \
-    xdg-utils \
-    --no-install-recommends && \
-    rm -rf /var/lib/apt/lists/*
+# Рабочая директория в контейнере
+WORKDIR /app
 
-# Устанавливаем Playwright и браузеры
-RUN pip install --no-cache-dir playwright && \
-    playwright install --with-deps
-
-# Устанавливаем зависимости проекта
+# Копируем файлы зависимостей (если есть requirements.txt)
 COPY requirements.txt .
+
+# Устанавливаем зависимости Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем весь проект в контейнер
+RUN patchright install
+# Копируем весь проект
 COPY . .
 
-# Указываем команду для запуска бота
+# Команда запуска бота
 CMD ["python", "main.py"]
