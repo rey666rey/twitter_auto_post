@@ -19,6 +19,7 @@ class User(Base):
     tg_id: Mapped[int] = mapped_column(BIGINT)
     settings: Mapped[dict] = mapped_column(JSON, nullable=True)
     tweets: Mapped[dict] = mapped_column(JSON, nullable=True)
+    communities: Mapped[dict] = mapped_column(JSON, nullable=True)
 
     accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
 

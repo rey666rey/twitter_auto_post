@@ -4,8 +4,10 @@ import pyotp
 import primp
 import math
 import string
+import os
 from urllib.parse import urlparse
-from config import COMMUNITIES_LIST
+from config import TEMP_DIR
+from twitter.media_process import choose_file, unique_media
 import app.database.requests as rq
 
 from patchright.async_api import async_playwright, Locator, Page
@@ -87,7 +89,7 @@ async def create_page(p, proxy, session, user_agent: str):
 
     browser = await p.chromium.launch(
         proxy=proxy_dict,
-        headless=False,
+        headless=True,
         args=launch_args
     )
 
@@ -159,15 +161,12 @@ async def auth(nickname, password, proxy, token):
         finally:
             await browser.close()
 
-async def post(tg_id, proxy, session, user_agent, community:bool):
+async def post(tg_id, proxy, session, user_agent, community:bool, media:bool):
     async with async_playwright() as p:
         browser, context, page = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
         try:
             if community:
-                with open(COMMUNITIES_LIST, 'r', encoding='utf-8') as f:
-                    lines = f.readlines()
-                    lines = [line.strip() for line in lines if line.strip()]
-                community = random.choice(lines) if lines else ''
+                community = random.choice(await rq.get_user_communities(tg_id=tg_id))
                 await page.goto(community, timeout=60000)
             else:
                 await page.goto('https://x.com/home', timeout=60000)
@@ -192,6 +191,21 @@ async def post(tg_id, proxy, session, user_agent, community:bool):
             tweet_box = page.get_by_role("textbox", name="Post text")
             await tweet_box.wait_for(state="visible")
             await human_type(tweet_box, text=tweet_text)
+            if media:
+                media_path = choose_file(1)[-1]
+                random_number = random.randint(1000, 9999)
+                extension = os.path.splitext(media_path)[1].lower()
+                unique_media_path = os.path.join(TEMP_DIR, f'temporary_{random_number}{extension}')
+                unique_media(media_path, unique_media_path)
+                await asyncio.sleep(3)
+                inputs = page.locator('input[type="file"][data-testid="fileInput"]')
+                if community:
+                    await inputs.nth(0).set_input_files(unique_media_path)
+                else:
+                    await inputs.nth(1).set_input_files(unique_media_path)
+                await asyncio.sleep(2)
+                os.remove(unique_media_path)
+                await asyncio.sleep(3)
             await click_random(page.get_by_test_id('tweetButton'))
             await asyncio.sleep(1)
             post_was_sent = page.get_by_text("Your post was sent", exact=False)
@@ -200,37 +214,38 @@ async def post(tg_id, proxy, session, user_agent, community:bool):
             await context.close()
             await browser.close()
 
-async def parsing(proxy, session, user_agent, tg_id, link):
-    async with async_playwright() as p:
-        try:
-            browser, context, page = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
-            await page.goto(link, timeout=60000)
+async def parsing(proxy, session, user_agent, tg_id, links):
+    tweet_count = 0
+    for link in links:
+        async with async_playwright() as p:
+            try:
+                browser, context, page = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
+                await page.goto(link, timeout=60000)
 
-            await page.wait_for_selector("article")  # Ждём появления твитов
+                await page.wait_for_selector("article")  # Ждём появления твитов
 
-            collected = set()
-            last_height = await page.evaluate("() => document.body.scrollHeight")
+                collected = set()
+                last_height = await page.evaluate("() => document.body.scrollHeight")
 
-            while True:
-                tweets = await page.locator("article div[data-testid='tweetText']").all_inner_texts()
-                for t in tweets:
-                    collected.add(t.strip())
+                while True:
+                    tweets = await page.locator("article div[data-testid='tweetText']").all_inner_texts()
+                    for t in tweets:
+                        collected.add(t.strip())
 
-                await page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
-                await asyncio.sleep(5)
+                    await page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
+                    await asyncio.sleep(5)
 
-                new_height = await page.evaluate("() => document.body.scrollHeight")
-                if new_height == last_height:
-                    break
-                last_height = new_height
+                    new_height = await page.evaluate("() => document.body.scrollHeight")
+                    if new_height == last_height:
+                        break
+                    last_height = new_height
 
-            print(collected)
-            tweet_count = await rq.save_user_tweets(tg_id, list(collected))
+                tweet_count += await rq.save_user_tweets(tg_id, list(collected))
 
-            result = f"✅ Записано {tweet_count} уникальных твитов"
-        except Exception as e:
-            result = e
-            await browser.close()
+                result = f"✅ Записано {tweet_count} уникальных твитов"
+            except Exception as e:
+                result = f'Ошибка парсинга: {e}'
+                await browser.close()
 
     return result if result is not None else 0
 

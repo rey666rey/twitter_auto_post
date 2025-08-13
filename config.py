@@ -10,6 +10,9 @@ DEFAULT_SETTINGS = {
         "interval_hours": 3
 }}
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # путь до текущего .py файла
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PHOTO_DIR = os.path.join(BASE_DIR, 'content', 'photos')
+TEMP_DIR = os.path.join(BASE_DIR, 'temp')
 
-COMMUNITIES_LIST = os.path.join(BASE_DIR, 'communities.txt')
+if not os.path.exists(TEMP_DIR):
+    os.mkdir(TEMP_DIR)
