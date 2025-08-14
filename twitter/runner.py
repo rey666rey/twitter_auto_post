@@ -126,8 +126,7 @@ async def task_worker(tg_id: int, bot: Bot, chat_id: int, queue: asyncio.Queue, 
                 else:
                     # Показываем таймер только для активных задач
                     mins_left = time_until_next // 60
-                    secs_left = time_until_next % 60
-                    wait_text = f"⏳ Задача {task.name} запустится через {mins_left} мин {secs_left} сек"
+                    wait_text = f"⏳ Задача {task.name} запустится через {mins_left} мин"
 
                     if wait_text != item['last_text']:
                         await bot.edit_message_text(
