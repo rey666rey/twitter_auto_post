@@ -89,7 +89,7 @@ async def create_page(p, proxy, session, user_agent: str):
 
     browser = await p.chromium.launch(
         proxy=proxy_dict,
-        headless=True,
+        headless=False,
         args=launch_args
     )
 
