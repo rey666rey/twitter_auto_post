@@ -18,30 +18,30 @@ async def work_parsing_only(tg_id: int, bot: Bot, chat_id: int, message_id: int,
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                     text="Парсинг: ⚠️ Нет аккаунтов для парсинга")
         return
-    for account in accounts:
-        nickname = account.nickname
-        try:
-            if not account.session:
-                await tweet.auth(account.nickname, account.password, account.proxy, account.token)
-                # Обновляем данные после логина
-                account = await rq.get_account_by_nickname(account.nickname)
-                await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                            text=f"Парсинг: ✅ {nickname}: Успешный вход")
-            else:
-                await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                            text=f"Парсинг: ℹ️ {nickname}: Уже залогинен")
+    account = accounts[-1]
+    nickname = account.nickname
+    try:
+        if not account.session:
+            await tweet.auth(account.nickname, account.password, account.proxy, account.token)
+            # Обновляем данные после логина
+            account = await rq.get_account_by_nickname(account.nickname)
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                        text=f"Парсинг: ✅ {nickname}: Успешный вход")
+        else:
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                        text=f"Парсинг: ℹ️ {nickname}: Уже залогинен")
 
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"⚡️ Идет парсинг")
-            result = await tweet.parsing(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, links=links)
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"{result}")
-        except Exception as e:
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"❌ Парсинг: {nickname}: Ошибка — {e}")
-            raise
+        await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                    text=f"⚡️ Идет парсинг")
+        result = await tweet.parsing(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, links=links)
+        await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                    text=f"{result}")
+    except Exception as e:
+        await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                    text=f"❌ Парсинг: {nickname}: Ошибка — {e}")
+        raise
 
-        await asyncio.sleep(2)  # Хуманизация
+    await asyncio.sleep(2)  # Хуманизация
 
 async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int):
     accounts = await rq.get_user_accounts(tg_id)
