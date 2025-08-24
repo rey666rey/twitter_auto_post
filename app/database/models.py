@@ -1,9 +1,21 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
-from sqlalchemy import String, JSON, BIGINT, ForeignKey
+from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy import String, BigInteger, ForeignKey
+import os
+from dotenv import load_dotenv
 
-# Инициализация движка и сессии
-engine = create_async_engine(url='sqlite+aiosqlite:///db.sqlite3', echo=False)
+load_dotenv()
+
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASS")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+
+DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 
@@ -11,21 +23,27 @@ async_session = async_sessionmaker(engine, expire_on_commit=False)
 class Base(AsyncAttrs, DeclarativeBase):
     pass
 
+
 # Модель пользователя
 class User(Base):
-    __tablename__ = 'users'
+    __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    tg_id: Mapped[int] = mapped_column(BIGINT)
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # Можно UUID
+    tg_id: Mapped[int] = mapped_column(BigInteger)
     settings: Mapped[dict] = mapped_column(JSON, nullable=True)
     tweets: Mapped[dict] = mapped_column(JSON, nullable=True)
-    communities: Mapped[dict] = mapped_column(JSON, nullable=True)
+    communities: Mapped[list] = mapped_column(JSON, nullable=True)
 
-    accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
+    accounts = relationship(
+        "Account",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
 
-# Модель аккаунта (например, Twitter-аккаунт)
+
+# Модель аккаунта
 class Account(Base):
-    __tablename__ = 'accounts'
+    __tablename__ = "accounts"
 
     nickname: Mapped[str] = mapped_column(String, primary_key=True)
     email: Mapped[str] = mapped_column(String)
@@ -33,11 +51,12 @@ class Account(Base):
     proxy: Mapped[str] = mapped_column(String)
     token: Mapped[str] = mapped_column(String)  # TOTP-секрет
 
-    session: Mapped[dict] = mapped_column(JSON, nullable=True)  # Сессионные данные
-    user_agent: Mapped[str] = mapped_column(String, nullable=True)  # Имитация fingerprint'а
+    session: Mapped[dict] = mapped_column(JSON, nullable=True)
+    user_agent: Mapped[str] = mapped_column(String, nullable=True)
 
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
     user = relationship("User", back_populates="accounts")
+
 
 # Инициализация базы
 async def async_main():

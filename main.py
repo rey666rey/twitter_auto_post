@@ -5,6 +5,7 @@ from config import BOT_TOKEN
 from app.handlers import router
 from app.database.models import async_main
 
+
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 

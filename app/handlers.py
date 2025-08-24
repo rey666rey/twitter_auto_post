@@ -80,12 +80,14 @@ async def edit_schedule(message: Message):
     accounts_count = await rq.get_account_count(tg_id)
     tweets = await rq.get_saved_tweets(tg_id)
     tweet_count = len(tweets) if tweets is not None else 0
-    is_community = posting_settings.get('community_posting')
+    community_state = posting_settings.get("community_posting", 0)
 
-    if is_community:
-        is_community = 'Постинг в community включен ✅'
-    else:
-        is_community = 'Постинг в community выключен ❌ '
+    if community_state == 2:
+        community_state = 'Постинг в community: включен ✅'
+    elif community_state == 1:
+        community_state = 'Постинг в community: 🎲 рандом'
+    elif community_state == 0:
+        community_state = 'Постинг в community: выключен ❌ '
 
     if not settings:
         await message.answer("⚠️ Настройки для вас не найдены.")
@@ -97,7 +99,7 @@ async def edit_schedule(message: Message):
     text += (
         f"📤 Постинг:\n"
         f"• Интервал: {post_interval} час\n"
-        f"• {is_community}\n\n"
+        f"• {community_state}\n\n"
     )
 
     text += (
@@ -157,21 +159,22 @@ async def parsing_tweets(message: Message, state: FSMContext):
 async def toggle_posting_callback(callback: CallbackQuery):
     tg_id = callback.from_user.id
     settings = await rq.get_user_settings(tg_id)
-
     posting_settings = settings.get('posting', {})
 
-    community_enabled = posting_settings.get("community_posting", False)
-    media_enabled = posting_settings.get("media")
+    community_state = posting_settings.get("community_posting", 0)  # 0=выкл, 1=рандом, 2=вкл
+    media_state = posting_settings.get("media", 0)
 
     if callback.data == "toggle_posting_community_posting":
-        new_community_enabled = not community_enabled
-        await rq.edit_user_setting(tg_id, 'posting', {"community_posting": new_community_enabled})
-        await callback.answer(f"Постинг в коммьюнити {'включен' if new_community_enabled else 'выключен'}")
+        new_state = (community_state + 1) % 3
+        await rq.edit_user_setting(tg_id, 'posting', {"community_posting": new_state})
+        messages = ["Постинг в коммьюнити выключен ❌", "Постинг в коммьюнити в режиме рандома 🎲", "Постинг в коммьюнити включен ✅"]
+        await callback.answer(messages[new_state])
 
     elif callback.data == "toggle_posting_media":
-        new_media_enabled = not media_enabled
-        await rq.edit_user_setting(tg_id, 'posting', {"media": new_media_enabled})
-        await callback.answer(f"Медиа {'включено' if new_media_enabled else 'выключено'}")
+        new_state = (media_state + 1) % 3
+        await rq.edit_user_setting(tg_id, 'posting', {"media": new_state})
+        messages = ["Медиа выключено ❌", "Медиа в режиме рандома 🎲", "Медиа включено ✅"]
+        await callback.answer(messages[new_state])
 
     # Получаем обновлённые настройки
     updated_settings = await rq.get_user_settings(tg_id)
@@ -217,17 +220,22 @@ async def start_parsing(message: Message, state: FSMContext):
 @router.message(AccountStates.add_communities)
 async def save_communities(message: Message, state: FSMContext):
     await state.clear()
-    communities = message.text.splitlines()
-    communities_lines = [community for community in communities]
+    communities_lines = [line.strip() for line in message.text.splitlines() if line.strip()]
+
     if not communities_lines:
-        await message.answer("❌ Пожалуйста, отправьте хотя бы одну строку с аккаунтом в формате:\n\n`nickname:email:password:proxy:token`", parse_mode="Markdown")
+        await message.answer(
+            "❌ Пожалуйста, отправьте хотя бы одну ссылку на community",
+        )
         return
 
-    # Сохраняем аккаунты
+    # Сохраняем ссылки
     added_count = await rq.save_user_communities(tg_id=message.from_user.id, new_communities=communities_lines)
 
     if added_count == 0:
-        await message.answer("❌ Не удалось сохранить ни один community. Убедитесь, что формат строк корректен.", reply_markup=kb.main_menu_keyboard())
+        await message.answer(
+            "❌ Не удалось сохранить ни одну community. Убедитесь, что ссылки корректны.",
+            reply_markup=kb.main_menu_keyboard()
+        )
     else:
         await message.answer(f"✅ Успешно добавлено или обновлено: {added_count}")
 

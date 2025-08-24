@@ -10,15 +10,17 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 def posting_toggle_keyboard(posting: dict) -> InlineKeyboardMarkup:
-    community_enabled = posting.get("community_posting")
-    media_enabled = posting.get("media")
+    states = ["❌ выкл", "🎲 рандом", "✅ вкл"]
+    community_state = posting.get("community_posting", 0)
+    media_state = posting.get("media")
+
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=f"{'✅' if community_enabled else '❌'} Постинг в community {'вкл' if community_enabled else 'выкл'}",
+            text=f"Постинг в community {states[community_state]}",
             callback_data="toggle_posting_community_posting"
         )],
         [InlineKeyboardButton(
-            text=f"{'✅' if media_enabled else '❌'} Медиа {'вкл' if media_enabled else 'выкл'}",
+            text=f"Медиа {states[media_state]}",
             callback_data="toggle_posting_media"
         )],
     ])

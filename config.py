@@ -1,12 +1,21 @@
 import os
+from dotenv import load_dotenv
 
-BOT_TOKEN = "8470415898:AAFVoAJZ9ZIpoUMRf9uxsnXvpRobMKH90oE"
-AUTHORIZED_USER_ID = 1249561776
+load_dotenv()
+
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASS")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+
+BOT_TOKEN=os.getenv("BOT_TOKEN")
+AUTHORIZED_USER_ID=1249561776
 
 DEFAULT_SETTINGS = {
     "posting": {
-        "media": False,
-        "community_posting": False,
+        "media": 0,
+        "community_posting": 0,
         "interval_hours": 3
 }}
 

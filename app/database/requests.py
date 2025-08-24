@@ -50,31 +50,25 @@ async def get_user_settings(tg_id: int) -> dict | None:
         return None
 
 async def save_user_communities(tg_id: int, new_communities: list) -> int:
-    """
-    Сохраняет новые твиты пользователя и возвращает количество уникальных добавленных твитов.
-    """
     async with async_session() as session:
         async with session.begin():
             result = await session.execute(select(User).where(User.tg_id == tg_id))
             user = result.scalar_one_or_none()
-
             if not user:
                 print(f"⚠️ Пользователь с tg_id={tg_id} не найден")
                 return 0
 
             existing_communities = user.communities or []
-            if isinstance(existing_communities, dict):
-                existing_communities = list(existing_communities.values())
 
             existing_set = set(existing_communities)
             new_set = set(new_communities)
 
-            # Определяем, что реально новое
             unique_new = new_set - existing_set
+            if not unique_new:
+                return 0
 
             # Объединяем
-            combined = list(existing_set | new_set)
-            user.communities = combined
+            user.communities = list(existing_set | new_set)
 
             return len(unique_new)
 

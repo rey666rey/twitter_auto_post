@@ -89,7 +89,7 @@ async def create_page(p, proxy, session, user_agent: str):
 
     browser = await p.chromium.launch(
         proxy=proxy_dict,
-        headless=False,
+        headless=True,
         args=launch_args
     )
 
@@ -161,10 +161,11 @@ async def auth(nickname, password, proxy, token):
         finally:
             await browser.close()
 
-async def post(tg_id, proxy, session, user_agent, community:bool, media:bool):
+async def post(tg_id, proxy, session, user_agent, community:int, media:bool):
     async with async_playwright() as p:
         browser, context, page = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
         try:
+            community = {0: lambda: False, 1: lambda: random.choice([True, False]), 2: lambda: True}[community]()
             if community:
                 community = random.choice(await rq.get_user_communities(tg_id=tg_id))
                 await page.goto(community, timeout=60000)
@@ -173,6 +174,7 @@ async def post(tg_id, proxy, session, user_agent, community:bool, media:bool):
 
             tweet_text = await rq.get_random_tweet(tg_id)
 
+            await page.get_by_test_id('SideNav_NewTweet_Button').wait_for(state='visible', timeout=60000)
             await click_random(page.get_by_test_id('SideNav_NewTweet_Button'))
             await asyncio.sleep(2)
             not_in_community = await page.get_by_text("Posting in a Community").is_visible()
@@ -189,7 +191,7 @@ async def post(tg_id, proxy, session, user_agent, community:bool, media:bool):
                 await click_random(page.get_by_test_id('SideNav_NewTweet_Button'))
 
             tweet_box = page.get_by_role("textbox", name="Post text")
-            await tweet_box.wait_for(state="visible")
+            await tweet_box.wait_for(state="visible", timeout=60000)
             await human_type(tweet_box, text=tweet_text)
             if media:
                 media_path = choose_file(1)[-1]
@@ -222,7 +224,7 @@ async def parsing(proxy, session, user_agent, tg_id, links):
                 browser, context, page = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
                 await page.goto(link, timeout=60000)
 
-                await page.wait_for_selector("article")  # Ждём появления твитов
+                await page.wait_for_selector("article", timeout=60000)  # Ждём появления твитов
 
                 collected = set()
                 last_height = await page.evaluate("() => document.body.scrollHeight")
