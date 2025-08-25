@@ -22,11 +22,13 @@ async def work_parsing_only(tg_id: int, bot: Bot, chat_id: int, message_id: int,
     nickname = account.nickname
     try:
         if not account.session:
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                        text=f"✨ Парсинг: {nickname}: логиним")
             await tweet.auth(account.nickname, account.password, account.proxy, account.token)
             # Обновляем данные после логина
             account = await rq.get_account_by_nickname(account.nickname)
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"Парсинг: ✅ {nickname}: Успешный вход")
+                                        text=f"✅ Парсинг: {nickname}: Успешный вход")
         else:
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"Парсинг: ℹ️ {nickname}: Уже залогинен")
@@ -53,6 +55,8 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
         nickname = account.nickname
         try:
             if not account.session:
+                await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                            text=f"✨ Парсинг: {nickname}: логиним")
                 await tweet.auth(account.nickname, account.password, account.proxy, account.token)
                 # Обновляем данные после логина
                 account = await rq.get_account_by_nickname(account.nickname)
@@ -67,8 +71,7 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"⚡️ Идет постинг")
             await tweet.post(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, community = community_status, media = media_status)
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"Постинг: ✅ {nickname}: Пост отправлен")
+            await bot.send_message(chat_id=chat_id, text=f"Постинг: ✅ {nickname}: Пост отправлен")
         except Exception as e:
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"❌ Постинг: {nickname}: Ошибка — {e}")

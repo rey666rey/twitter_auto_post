@@ -3,7 +3,7 @@ name: CI/CD Bot
 on:
   push:
     branches:
-      - dev   # Для продакшена можно заменить на main
+      - main
 
 jobs:
   deploy:
@@ -21,6 +21,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd ~/twitter_auto_post
-            git pull origin dev
+            git pull origin main
             docker compose down
             docker compose up -d --build
