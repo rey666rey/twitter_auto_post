@@ -114,54 +114,6 @@ async def create_page(p, proxy, session, user_agent: str):
     page = await context.new_page()
     return browser, context, page
 
-async def auth(nickname, password, proxy, token):
-    async with async_playwright() as p:
-        # Создаём user-agent
-        valid_versions = [f"chrome_{v}" for v in range(128, 134) if v != 132]
-        chosen_version = random.choice(valid_versions)
-        client = primp.Client(impersonate=chosen_version, impersonate_os="windows")
-        user_agent = client.headers["user-agent"]
-
-        # Генерируем TOTP
-        totp = pyotp.TOTP(token)
-
-        browser, context, page = await create_page(p, proxy=proxy, session=None, user_agent=user_agent)
-
-        try:
-            await page.goto('https://x.com/', timeout=60000)
-
-            login_button = page.get_by_test_id("loginButton")
-            await login_button.scroll_into_view_if_needed()
-            await click_random(login_button)
-
-            await click_random(page.get_by_role("textbox", name="Phone, email, or username"))
-            await human_type(page.get_by_role("textbox", name="Phone, email, or username"), text=nickname)
-
-            await click_random(page.get_by_role("button", name="Next"))
-
-            await click_random(page.get_by_role("textbox", name="Password Reveal password"))
-            await human_type(page.get_by_role("textbox", name="Password Reveal password"), text=password)
-            await page.get_by_role("textbox", name="Password Reveal password").press("Enter")
-
-            await click_random(page.get_by_test_id("ocfEnterTextTextInput"))
-            await human_type(page.get_by_test_id("ocfEnterTextTextInput"), text=totp.now())
-            await click_random(page.get_by_role("button", name="Next"))
-
-            # Ждём, чтобы страница полностью прогрузилась и сессия обновилась
-            await asyncio.sleep(15)
-
-            # Получаем состояние сессии (cookies, localStorage и т.д.)
-            storage_state = await context.storage_state()
-
-            # Обновляем в базе user_agent и session (куки и т.п.)
-            await rq.update_account_fields(nickname, {
-                "user_agent": user_agent,
-                "session": storage_state
-            })
-
-        finally:
-            await browser.close()
-
 async def retry_step(step_func, retries=10, reload_page=None, step_name=""):
     """Выполняет шаг с ретраями.
        step_func — это асинхронная функция без аргументов.
@@ -179,6 +131,77 @@ async def retry_step(step_func, retries=10, reload_page=None, step_name=""):
                 continue
             else:
                 raise
+
+async def auth(nickname, password, proxy, token):
+    async with async_playwright() as p:
+        # Создаём user-agent
+        valid_versions = [f"chrome_{v}" for v in range(128, 134) if v != 132]
+        chosen_version = random.choice(valid_versions)
+        client = primp.Client(impersonate=chosen_version, impersonate_os="windows")
+        user_agent = client.headers["user-agent"]
+
+        # Генерируем TOTP
+        totp = pyotp.TOTP(token)
+
+        browser, context, page = await create_page(
+            p, proxy=proxy, session=None, user_agent=user_agent
+        )
+
+        try:
+            # Заход на сайт
+            await retry_step(lambda: page.goto("https://x.com/", timeout=60000),
+                             reload_page=page, step_name="goto /")
+
+            # Логин
+            await retry_step(lambda: page.get_by_test_id("loginButton").wait_for(state="visible", timeout=30000),
+                             reload_page=page, step_name="loginButton visible")
+            await retry_step(lambda: click_random(page.get_by_test_id("loginButton")),
+                             reload_page=page, step_name="click loginButton")
+
+            # username
+            await retry_step(lambda: page.get_by_role("textbox", name="Phone, email, or username").wait_for(timeout=30000),
+                             reload_page=page, step_name="username field visible")
+            await retry_step(lambda: click_random(page.get_by_role("textbox", name="Phone, email, or username")),
+                             reload_page=page, step_name="click username")
+            await retry_step(lambda: human_type(page.get_by_role("textbox", name="Phone, email, or username"), text=nickname),
+                             reload_page=page, step_name="type username")
+            await retry_step(lambda: click_random(page.get_by_role("button", name="Next")),
+                             reload_page=page, step_name="click next (after username)")
+
+            # password
+            await retry_step(lambda: page.get_by_role("textbox", name="Password Reveal password").wait_for(timeout=30000),
+                             reload_page=page, step_name="password field visible")
+            await retry_step(lambda: click_random(page.get_by_role("textbox", name="Password Reveal password")),
+                             reload_page=page, step_name="click password")
+            await retry_step(lambda: human_type(page.get_by_role("textbox", name="Password Reveal password"), text=password),
+                             reload_page=page, step_name="type password")
+            await retry_step(lambda: page.get_by_role("textbox", name="Password Reveal password").press("Enter"),
+                             reload_page=page, step_name="press enter password")
+
+            # 2FA
+            await retry_step(lambda: page.get_by_test_id("ocfEnterTextTextInput").wait_for(timeout=30000),
+                             reload_page=page, step_name="2FA field visible")
+            await retry_step(lambda: click_random(page.get_by_test_id("ocfEnterTextTextInput")),
+                             reload_page=page, step_name="click 2FA")
+            await retry_step(lambda: human_type(page.get_by_test_id("ocfEnterTextTextInput"), text=totp.now()),
+                             reload_page=page, step_name="type 2FA")
+            await retry_step(lambda: click_random(page.get_by_role("button", name="Next")),
+                             reload_page=page, step_name="click next (after 2FA)")
+
+            # Ждём загрузки
+            await asyncio.sleep(15)
+
+            # Получаем сессию
+            storage_state = await context.storage_state()
+
+            # Обновляем в базе
+            await rq.update_account_fields(nickname, {
+                "user_agent": user_agent,
+                "session": storage_state
+            })
+
+        finally:
+            await browser.close()
 
 async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     async with async_playwright() as p:
@@ -256,22 +279,38 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
 
 async def parsing(proxy, session, user_agent, tg_id, links):
     tweet_count = 0
+    result = None
+
     for link in links:
         async with async_playwright() as p:
+            browser = None
             try:
-                browser, context, page = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
-                await page.goto(link, timeout=60000)
+                browser, context, page = await create_page(
+                    p, proxy=proxy, session=session, user_agent=user_agent
+                )
 
-                await page.wait_for_selector("article", timeout=60000)  # Ждём появления твитов
+                # Заходим на страницу
+                await retry_step(lambda: page.goto(link, timeout=60000),
+                                 reload_page=page, step_name=f"goto {link}")
+
+                # Ждём появления хотя бы одного твита
+                await retry_step(lambda: page.wait_for_selector("article", timeout=60000),
+                                 reload_page=page, step_name="wait article")
 
                 collected = set()
                 last_height = await page.evaluate("() => document.body.scrollHeight")
 
                 while True:
-                    tweets = await page.locator("article div[data-testid='tweetText']").all_inner_texts()
-                    for t in tweets:
-                        collected.add(t.strip())
+                    # Собираем тексты твитов
+                    try:
+                        tweets = await page.locator("article div[data-testid='tweetText']").all_inner_texts()
+                        for t in tweets:
+                            collected.add(t.strip())
+                    except PlaywrightTimeoutError as e:
+                        print(f"⚠️ Ошибка при сборе твитов: {e}")
+                        break
 
+                    # Скроллим
                     await page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
                     await asyncio.sleep(5)
 
@@ -281,12 +320,13 @@ async def parsing(proxy, session, user_agent, tg_id, links):
                     last_height = new_height
 
                 tweet_count += await rq.save_user_tweets(tg_id, list(collected))
-
                 result = f"✅ Записано {tweet_count} уникальных твитов"
+
             except Exception as e:
-                result = f'Ошибка парсинга: {e}'
-                await browser.close()
+                result = f'❌ Ошибка парсинга: {e}'
+            finally:
+                if browser:
+                    await browser.close()
 
-    return result if result is not None else 0
-
+    return result if result is not None else "⚠️ Нет результата"
 
