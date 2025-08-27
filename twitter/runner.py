@@ -1,5 +1,4 @@
 import asyncio
-from patchright.async_api import TimeoutError as PlaywrightTimeoutError
 import app.database.requests as rq
 import twitter.methods as tweet
 from aiogram import Bot
@@ -75,12 +74,6 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
                                         text=f"⚡️ Идет постинг")
             await tweet.post(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, community = community_status, media = media_status)
             await bot.send_message(chat_id=chat_id, text=f"Постинг: ✅ {nickname}: Пост отправлен")
-        except PlaywrightTimeoutError:
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"❌ Постинг: {nickname}: Таймаут. Попробуем еще раз")
-            accounts.append(account)
-            await asyncio.sleep(2)
-            continue
 
         except Exception as e:
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,

@@ -5,6 +5,7 @@ import primp
 import math
 import string
 import os
+from patchright.async_api import TimeoutError as PlaywrightTimeoutError
 from urllib.parse import urlparse
 from config import TEMP_DIR
 from twitter.media_process import choose_file, unique_media
@@ -161,60 +162,97 @@ async def auth(nickname, password, proxy, token):
         finally:
             await browser.close()
 
-async def post(tg_id, proxy, session, user_agent, community:int, media:bool):
+async def retry_step(step_func, retries=10, reload_page=None, step_name=""):
+    """Выполняет шаг с ретраями.
+       step_func — это асинхронная функция без аргументов.
+       reload_page — передаётся page, если при ошибке нужно сделать reload().
+    """
+    for attempt in range(1, retries+1):
+        try:
+            return await step_func()
+        except PlaywrightTimeoutError as e:
+            print(f"⚠️ Timeout на шаге {step_name} (попытка {attempt}/{retries}): {e}")
+            if attempt < retries:
+                if reload_page:
+                    await reload_page.reload(timeout=60000)
+                await asyncio.sleep(2)
+                continue
+            else:
+                raise
+
+async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     async with async_playwright() as p:
         browser, context, page = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
-        try:
-            community = {0: lambda: False, 1: lambda: random.choice([True, False]), 2: lambda: True}[community]()
-            if community:
-                community = random.choice(await rq.get_user_communities(tg_id=tg_id))
-                await page.goto(community, timeout=60000)
+
+        # шаг 1: заход на страницу
+        async def goto_page():
+            choice = {0: lambda: False, 1: lambda: random.choice([True, False]), 2: lambda: True}[community]()
+            if choice:
+                community_url = random.choice(await rq.get_user_communities(tg_id=tg_id))
+                await page.goto(community_url, timeout=60000)
+                return choice
             else:
-                await page.goto('https://x.com/home', timeout=60000)
+                await page.goto("https://x.com/home", timeout=60000)
+                return choice
 
-            tweet_text = await rq.get_random_tweet(tg_id)
+        community_choice = await retry_step(lambda: goto_page(), reload_page=page, step_name="goto")
 
-            await page.get_by_test_id('SideNav_NewTweet_Button').wait_for(state='visible', timeout=60000)
-            await click_random(page.get_by_test_id('SideNav_NewTweet_Button'))
-            await asyncio.sleep(2)
-            not_in_community = await page.get_by_text("Posting in a Community").is_visible()
+        tweet_text = await rq.get_random_tweet(tg_id)
 
-            if not_in_community:
-                print('Мы не в комьюнити, присоединяемся')
-                await click_random(page.get_by_role("button", name="Got it"))
-                join_button = page.get_by_role("button").filter(has_text='Join')
-                if await join_button.count() > 0:
-                    await click_random(join_button)
-                agree_button = page.get_by_role("button", name="Agree and join")
-                await agree_button.wait_for(state='visible')
-                await click_random(agree_button)
-                await click_random(page.get_by_test_id('SideNav_NewTweet_Button'))
+        # шаг 2: открыть форму постинга
+        await retry_step(
+            lambda: page.get_by_test_id("SideNav_NewTweet_Button").wait_for(state="visible", timeout=60000), reload_page=None, step_name="wait_new_tweet_button"
+        )
+        await click_random(page.get_by_test_id("SideNav_NewTweet_Button"))
+        await asyncio.sleep(2)
 
-            tweet_box = page.get_by_role("textbox", name="Post text")
-            await tweet_box.wait_for(state="visible", timeout=60000)
-            await human_type(tweet_box, text=tweet_text)
-            if media:
-                media_path = choose_file(1)[-1]
-                random_number = random.randint(1000, 9999)
-                extension = os.path.splitext(media_path)[1].lower()
-                unique_media_path = os.path.join(TEMP_DIR, f'temporary_{random_number}{extension}')
-                unique_media(media_path, unique_media_path)
-                await asyncio.sleep(3)
-                inputs = page.locator('input[type="file"][data-testid="fileInput"]')
-                if community:
-                    await inputs.nth(0).set_input_files(unique_media_path)
-                else:
-                    await inputs.nth(1).set_input_files(unique_media_path)
-                await asyncio.sleep(2)
-                os.remove(unique_media_path)
-                await asyncio.sleep(3)
-            await click_random(page.get_by_test_id('tweetButton'))
-            await asyncio.sleep(1)
-            post_was_sent = page.get_by_text("Your post was sent", exact=False)
-            await post_was_sent.wait_for(state="visible")
-        finally:
-            await context.close()
-            await browser.close()
+        # шаг 3: если надо — вступить в комьюнити
+        if await page.get_by_text("Posting in a Community").is_visible():
+            print("Мы не в комьюнити, присоединяемся")
+            await click_random(page.get_by_role("button", name="Got it"))
+            join_button = page.get_by_role("button").filter(has_text="Join")
+            if await join_button.count() > 0:
+                await click_random(join_button)
+            agree_button = page.get_by_role("button", name="Agree and join")
+            await retry_step(
+                lambda: agree_button.wait_for(state="visible", timeout=60000), reload_page=page, step_name="wait_agree_join"
+            )
+            await click_random(agree_button)
+            await click_random(page.get_by_test_id("SideNav_NewTweet_Button"))
+
+        # шаг 4: ввести текст
+        tweet_box = page.get_by_role("textbox", name="Post text")
+        await retry_step(
+            lambda: tweet_box.wait_for(state="visible", timeout=60000), reload_page=None, step_name="wait_tweet_box"
+        )
+        await human_type(tweet_box, text=tweet_text)
+
+        # шаг 5: загрузка медиа
+        if media:
+            media_path = choose_file(1)[-1]
+            random_number = random.randint(1000, 9999)
+            extension = os.path.splitext(media_path)[1].lower()
+            unique_media_path = os.path.join(TEMP_DIR, f"temporary_{random_number}{extension}")
+            unique_media(media_path, unique_media_path)
+
+            await asyncio.sleep(3)
+            inputs = page.locator('input[type="file"][data-testid="fileInput"]')
+            if community_choice:
+                await inputs.nth(0).set_input_files(unique_media_path)
+            else:
+                await inputs.nth(1).set_input_files(unique_media_path)
+
+            os.remove(unique_media_path)
+            await asyncio.sleep(3)
+
+        # шаг 6: отправка поста
+        await click_random(page.get_by_test_id("tweetButton"))
+        await retry_step(
+            lambda: page.get_by_text("Your post was sent", exact=False).wait_for(state="visible", timeout=60000), reload_page=page, step_name="wait_post_sent"
+        )
+
+        await context.close()
+        await browser.close()
 
 async def parsing(proxy, session, user_agent, tg_id, links):
     tweet_count = 0
