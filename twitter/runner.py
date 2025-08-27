@@ -71,9 +71,10 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
             community_status = settings.get('posting', {}).get('community_posting')
             media_status = settings.get('posting', {}).get('media')
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"⚡️ Идет постинг")
+                                        text=f"⚡️{nickname}: Идет постинг")
             await tweet.post(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, community = community_status, media = media_status)
-            await bot.send_message(chat_id=chat_id, text=f"Постинг: ✅ {nickname}: Пост отправлен")
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                        text=f"Постинг: ✅ {nickname}: Пост отправлен")
 
         except Exception as e:
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
