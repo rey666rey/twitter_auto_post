@@ -11,6 +11,12 @@ from config import TEMP_DIR
 from twitter.media_process import choose_file, unique_media
 import app.database.requests as rq
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+HEADLESS = os.getenv("HEADLESS")
+
 from patchright.async_api import async_playwright, Locator, Page
 
 async def click_random(locator: Locator, manual_radius: float = None):
@@ -90,7 +96,7 @@ async def create_page(p, proxy, session, user_agent: str):
 
     browser = await p.chromium.launch(
         proxy=proxy_dict,
-        headless=False,
+        headless=HEADLESS,
         args=launch_args
     )
 
