@@ -224,14 +224,14 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
         tweet_text = await rq.get_random_tweet(tg_id)
 
         while True:
-            await page.locator("button", has_text=re.compile(r"^(Joined|Join)$")).wait_for(state="visible")
+            await retry_step(lambda: page.locator("button", has_text=re.compile(r"^(Joined|Join)$")).wait_for(state="visible", timeout=60000), reload_page=page, step_name="Wait for Join/Joined button")
             joined_button = page.locator("button", has_text="Joined")
             is_joined = await joined_button.is_visible()
             if is_joined:
                 break
             else:
                 join_button = page.locator("button", has_text="Join")
-                if join_button.is_visible():
+                if await join_button.is_visible():
                     await click_random(join_button)
                     await asyncio.sleep(2)
                     agree_button = page.get_by_role("button", name="Agree and join")
