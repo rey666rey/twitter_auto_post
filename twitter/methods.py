@@ -90,7 +90,7 @@ async def create_page(p, proxy, session, user_agent: str):
 
     browser = await p.chromium.launch(
         proxy=proxy_dict,
-        headless=True,
+        headless=False,
         args=launch_args
     )
 
@@ -206,44 +206,52 @@ async def auth(nickname, password, proxy, token):
 async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     async with async_playwright() as p:
         browser, context, page = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
-
-        # шаг 1: заход на страницу
-        async def goto_page():
-            choice = {0: lambda: False, 1: lambda: random.choice([True, False]), 2: lambda: True}[community]()
-            if choice:
-                community_url = random.choice(await rq.get_user_communities(tg_id=tg_id))
-                await page.goto(community_url, timeout=60000)
-                return choice
-            else:
-                await page.goto("https://x.com/home", timeout=60000)
-                return choice
-
-        community_choice = await retry_step(lambda: goto_page(), reload_page=page, step_name="goto")
-
+        community_choice = {0: lambda: False, 1: lambda: random.choice([True, False]), 2: lambda: True}[community]()
+        used_communities = []
+        if community_choice:
+            communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
+            community_url = random.choice(communities_urls)
+            await page.goto(community_url, timeout=60000)
+        else:
+            await page.goto("https://x.com/home", timeout=60000)
         tweet_text = await rq.get_random_tweet(tg_id)
 
-        # шаг 2: открыть форму постинга
+        while True:
+            await page.reload(wait_until="domcontentloaded")
+            await asyncio.sleep(3)
+            joined_button = page.locator("button", has_text="Joined")
+            is_joined = await joined_button.is_visible()
+            if is_joined:
+                break
+            else:
+                join_button = page.locator("button", has_text="Join")
+                if join_button.is_visible():
+                    await join_button.click()
+                    await asyncio.sleep(2)
+                    agree_button = page.get_by_role("button", name="Agree and join")
+                    sorry_button = page.get_by_text('Sorry, you can’t join right now')
+                    if await agree_button.is_visible():
+                        await retry_step(
+                            lambda: agree_button.wait_for(state="visible", timeout=60000), reload_page=page,
+                            step_name="wait_agree_join"
+                        )
+                        await click_random(agree_button)
+                        await asyncio.sleep(1)
+                    elif await sorry_button.is_visible():
+                        used_communities.append(community_url)
+                        communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
+                        community_url = random.choice(communities_urls)
+                        await page.goto(community_url, timeout=60000)
+                        continue
         await retry_step(
-            lambda: page.get_by_test_id("SideNav_NewTweet_Button").wait_for(state="visible", timeout=60000), reload_page=None, step_name="wait_new_tweet_button"
+            lambda: page.get_by_test_id("SideNav_NewTweet_Button").wait_for(state="visible", timeout=60000),
+            reload_page=None, step_name="wait_new_tweet_button"
         )
         await click_random(page.get_by_test_id("SideNav_NewTweet_Button"))
         await asyncio.sleep(2)
 
-        # шаг 3: если надо — вступить в комьюнити
-        if await page.get_by_text("Posting in a Community").is_visible():
-            print("Мы не в комьюнити, присоединяемся")
-            await click_random(page.get_by_role("button", name="Got it"))
-            join_button = page.get_by_role("button").filter(has_text="Join")
-            if await join_button.count() > 0:
-                await click_random(join_button)
-            agree_button = page.get_by_role("button", name="Agree and join")
-            await retry_step(
-                lambda: agree_button.wait_for(state="visible", timeout=60000), reload_page=page, step_name="wait_agree_join"
-            )
-            await click_random(agree_button)
-            await click_random(page.get_by_test_id("SideNav_NewTweet_Button"))
+    # шаг 4: ввести текст
 
-        # шаг 4: ввести текст
         tweet_box = page.get_by_role("textbox", name="Post text")
         await retry_step(
             lambda: tweet_box.wait_for(state="visible", timeout=60000), reload_page=None, step_name="wait_tweet_box"
