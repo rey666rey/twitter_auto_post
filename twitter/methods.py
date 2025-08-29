@@ -218,9 +218,9 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
         if community_choice:
             communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
             community_url = random.choice(communities_urls)
-            await page.goto(community_url, timeout=60000)
+            await retry_step(lambda: page.goto(community_url, timeout=60000), reload_page=page, step_name='going to community')
         else:
-            await page.goto("https://x.com/home", timeout=60000)
+            await retry_step(lambda: page.goto("https://x.com/home", timeout=60000), reload_page=page, step_name='going to home page')
         tweet_text = await rq.get_random_tweet(tg_id)
 
         while True:
