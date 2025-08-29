@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-HEADLESS = os.getenv("HEADLESS")
+HEADLESS = os.getenv("HEADLESS", 'true').lower() == "true"
 
 from patchright.async_api import async_playwright, Locator, Page
 
