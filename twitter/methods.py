@@ -5,6 +5,7 @@ import primp
 import math
 import string
 import os
+import re
 from patchright.async_api import TimeoutError as PlaywrightTimeoutError
 from urllib.parse import urlparse
 from config import TEMP_DIR
@@ -223,8 +224,7 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
         tweet_text = await rq.get_random_tweet(tg_id)
 
         while True:
-            await page.reload(wait_until="domcontentloaded")
-            await asyncio.sleep(3)
+            await page.locator("button", has_text=re.compile(r"^(Joined|Join)$")).wait_for(state="visible")
             joined_button = page.locator("button", has_text="Joined")
             is_joined = await joined_button.is_visible()
             if is_joined:
@@ -232,7 +232,7 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
             else:
                 join_button = page.locator("button", has_text="Join")
                 if join_button.is_visible():
-                    await join_button.click()
+                    await click_random(join_button)
                     await asyncio.sleep(2)
                     agree_button = page.get_by_role("button", name="Agree and join")
                     sorry_button = page.get_by_text('Sorry, you can’t join right now')
