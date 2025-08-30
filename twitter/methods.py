@@ -105,6 +105,8 @@ async def create_page(p, proxy, session, user_agent: str):
         user_agent=user_agent,
         locale="en-US",
         viewport={"width": 1280, "height": 800},
+        record_video_dir=os.path.join(TEMP_DIR),
+        record_video_size={"width": 640, "height": 480},
         storage_state=session
     )
 
@@ -119,7 +121,8 @@ async def create_page(p, proxy, session, user_agent: str):
     """)
 
     page = await context.new_page()
-    return browser, context, page
+    video_path = page.video.path()
+    return browser, context, page, video_path
 
 async def retry_step(step_func, retries=10, reload_page=None, step_name=""):
     """Выполняет шаг с ретраями.
@@ -150,9 +153,7 @@ async def auth(nickname, password, proxy, token):
         # Генерируем TOTP
         totp = pyotp.TOTP(token)
 
-        browser, context, page = await create_page(
-            p, proxy=proxy, session=None, user_agent=user_agent
-        )
+        browser, context, page, video_path = await create_page(p, proxy=proxy, session=None, user_agent=user_agent)
 
         try:
             # Заход на сайт
@@ -206,49 +207,51 @@ async def auth(nickname, password, proxy, token):
                 "user_agent": user_agent,
                 "session": storage_state
             })
-
         finally:
             await browser.close()
+            return video_path
 
 async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     async with async_playwright() as p:
-        browser, context, page = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
+
+        browser, context, page, video_path = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
+        tweet_text = await rq.get_random_tweet(tg_id)
+
         community_choice = {0: lambda: False, 1: lambda: random.choice([True, False]), 2: lambda: True}[community]()
         used_communities = []
         if community_choice:
             communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
             community_url = random.choice(communities_urls)
             await retry_step(lambda: page.goto(community_url, timeout=60000), reload_page=page, step_name='going to community')
+            while True:
+                await retry_step(lambda: page.locator("button", has_text=re.compile(r"^(Joined|Join)$")).wait_for(state="visible", timeout=60000), reload_page=page, step_name="Wait for Join/Joined button")
+                joined_button = page.locator("button", has_text="Joined")
+                is_joined = await joined_button.is_visible()
+                if is_joined:
+                    break
+                else:
+                    join_button = page.locator("button", has_text="Join")
+                    if await join_button.is_visible():
+                        await click_random(join_button)
+                        await asyncio.sleep(2)
+                        agree_button = page.get_by_role("button", name="Agree and join")
+                        sorry_button = page.get_by_text('Sorry, you can’t join right now')
+                        if await agree_button.is_visible():
+                            await retry_step(
+                                lambda: agree_button.wait_for(state="visible", timeout=60000), reload_page=page,
+                                step_name="wait_agree_join"
+                            )
+                            await click_random(agree_button)
+                            await asyncio.sleep(1)
+                        elif await sorry_button.is_visible():
+                            used_communities.append(community_url)
+                            communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
+                            community_url = random.choice(communities_urls)
+                            await page.goto(community_url, timeout=60000)
+                            continue
         else:
-            await retry_step(lambda: page.goto("https://x.com/home", timeout=60000), reload_page=page, step_name='going to home page')
-        tweet_text = await rq.get_random_tweet(tg_id)
-
-        while True:
-            await retry_step(lambda: page.locator("button", has_text=re.compile(r"^(Joined|Join)$")).wait_for(state="visible", timeout=60000), reload_page=page, step_name="Wait for Join/Joined button")
-            joined_button = page.locator("button", has_text="Joined")
-            is_joined = await joined_button.is_visible()
-            if is_joined:
-                break
-            else:
-                join_button = page.locator("button", has_text="Join")
-                if await join_button.is_visible():
-                    await click_random(join_button)
-                    await asyncio.sleep(2)
-                    agree_button = page.get_by_role("button", name="Agree and join")
-                    sorry_button = page.get_by_text('Sorry, you can’t join right now')
-                    if await agree_button.is_visible():
-                        await retry_step(
-                            lambda: agree_button.wait_for(state="visible", timeout=60000), reload_page=page,
-                            step_name="wait_agree_join"
-                        )
-                        await click_random(agree_button)
-                        await asyncio.sleep(1)
-                    elif await sorry_button.is_visible():
-                        used_communities.append(community_url)
-                        communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
-                        community_url = random.choice(communities_urls)
-                        await page.goto(community_url, timeout=60000)
-                        continue
+            await retry_step(lambda: page.goto("https://x.com/home", timeout=60000), reload_page=page,
+                             step_name='going to home page')
         await retry_step(
             lambda: page.get_by_test_id("SideNav_NewTweet_Button").wait_for(state="visible", timeout=60000),
             reload_page=None, step_name="wait_new_tweet_button"
@@ -299,9 +302,7 @@ async def parsing(proxy, session, user_agent, tg_id, links):
         async with async_playwright() as p:
             browser = None
             try:
-                browser, context, page = await create_page(
-                    p, proxy=proxy, session=session, user_agent=user_agent
-                )
+                browser, context, page, video_path = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
 
                 # Заходим на страницу
                 await retry_step(lambda: page.goto(link, timeout=60000),
