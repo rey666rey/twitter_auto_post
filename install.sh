@@ -6,6 +6,8 @@ echo "🚀 Устанавливаю Docker и зависимости..."
 # Обновляем пакеты
 sudo apt-get update
 
+sudo apt install speedtest-cli
+
 # Ставим зависимости для apt
 sudo apt-get install -y ca-certificates curl gnupg
 
