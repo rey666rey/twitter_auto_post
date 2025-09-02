@@ -125,7 +125,7 @@ async def create_page(p, proxy, session, user_agent: str):
 
     return browser, context, page, video_path
 
-async def retry_step(step_func, retries=10, reload_page=None, step_name=""):
+async def retry_step(step_func, retries=3, reload_page=None, step_name=""):
     """Выполняет шаг с ретраями.
        step_func — это асинхронная функция без аргументов.
        reload_page — передаётся page, если при ошибке нужно сделать reload().
