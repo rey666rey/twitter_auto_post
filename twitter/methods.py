@@ -121,7 +121,8 @@ async def create_page(p, proxy, session, user_agent: str):
     """)
 
     page = await context.new_page()
-    video_path = page.video.path()
+    video_path = await page.video.path()
+
     return browser, context, page, video_path
 
 async def retry_step(step_func, retries=10, reload_page=None, step_name=""):
@@ -213,7 +214,6 @@ async def auth(nickname, password, proxy, token):
 
 async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     async with async_playwright() as p:
-
         browser, context, page, video_path = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
         tweet_text = await rq.get_random_tweet(tg_id)
 
@@ -236,6 +236,7 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
                         await asyncio.sleep(2)
                         agree_button = page.get_by_role("button", name="Agree and join")
                         sorry_button = page.get_by_text('Sorry, you can’t join right now')
+                        removed_button = page.get_by_text("You've been removed from this Community")
                         if await agree_button.is_visible():
                             await retry_step(
                                 lambda: agree_button.wait_for(state="visible", timeout=60000), reload_page=page,
@@ -243,7 +244,7 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
                             )
                             await click_random(agree_button)
                             await asyncio.sleep(1)
-                        elif await sorry_button.is_visible():
+                        elif await sorry_button.is_visible() or await removed_button.is_visible():
                             used_communities.append(community_url)
                             communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
                             community_url = random.choice(communities_urls)
@@ -294,8 +295,11 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
         await context.close()
         await browser.close()
 
+    return video_path
+
 async def parsing(proxy, session, user_agent, tg_id, links):
     tweet_count = 0
+    video_path = None
     result = None
 
     for link in links:
@@ -337,11 +341,11 @@ async def parsing(proxy, session, user_agent, tg_id, links):
                 tweet_count += await rq.save_user_tweets(tg_id, list(collected))
                 result = f"✅ Записано {tweet_count} уникальных твитов"
 
-            except Exception as e:
-                result = f'❌ Ошибка парсинга: {e}'
+            except Exception:
+                raise
             finally:
                 if browser:
                     await browser.close()
 
-    return result if result is not None else "⚠️ Нет результата"
+    return video_path
 

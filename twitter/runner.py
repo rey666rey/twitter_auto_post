@@ -1,4 +1,5 @@
 import asyncio
+import os
 import app.database.requests as rq
 import twitter.methods as tweet
 from aiogram import Bot
@@ -14,6 +15,7 @@ class ScheduledTask:
 
 async def work_parsing_only(tg_id: int, bot: Bot, chat_id: int, message_id: int, links):
     accounts = await rq.get_user_accounts(tg_id)
+    video_path = None
     if not accounts:
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                     text="Парсинг: ⚠️ Нет аккаунтов для парсинга")
@@ -24,7 +26,7 @@ async def work_parsing_only(tg_id: int, bot: Bot, chat_id: int, message_id: int,
         if not account.session:
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"✨ Парсинг: {nickname}: логиним")
-            await tweet.auth(account.nickname, account.password, account.proxy, account.token)
+            video_path = await tweet.auth(account.nickname, account.password, account.proxy, account.token)
             # Обновляем данные после логина
             account = await rq.get_account_by_nickname(account.nickname)
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
@@ -36,18 +38,25 @@ async def work_parsing_only(tg_id: int, bot: Bot, chat_id: int, message_id: int,
 
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                     text=f"⚡️ Идет парсинг")
-        result = await tweet.parsing(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, links=links)
+        video_path = await tweet.parsing(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, links=links)
+        result = await rq.get_saved_tweets(tg_id)
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                    text=f"{result}")
+                                    text=f"✅ Записано {len(result)} уникальных твитов")
     except Exception as e:
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                     text=f"❌ Парсинг: {nickname}: Ошибка — {e}")
+        if video_path:
+            await bot.send_video(chat_id=chat_id, video=video_path)
+            os.remove(video_path)
         raise
+    finally:
+        os.remove(video_path)
 
     await asyncio.sleep(2)  # Хуманизация
 
 async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int):
     accounts = await rq.get_user_accounts(tg_id)
+    video_path = None
     if not accounts:
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                     text="Постинг: ⚠️ Нет аккаунтов для постинга")
@@ -58,11 +67,12 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
             if not account.session:
                 await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                             text=f"✨ Постинг: {nickname}: логиним")
-                await tweet.auth(account.nickname, account.password, account.proxy, account.token)
+                video_path = await tweet.auth(account.nickname, account.password, account.proxy, account.token)
                 # Обновляем данные после логина
                 account = await rq.get_account_by_nickname(account.nickname)
                 await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                             text=f"Постинг: ✅ {nickname}: Успешный вход")
+                os.remove(video_path)
             else:
                 await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                             text=f"Постинг: ℹ️ {nickname}: Уже залогинен")
@@ -72,13 +82,17 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
             media_status = settings.get('posting', {}).get('media')
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"⚡️{nickname}: Идет постинг")
-            await tweet.post(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, community = community_status, media = media_status)
+            video_path = await tweet.post(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, community = community_status, media = media_status)
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"Постинг: ✅ {nickname}: Пост отправлен")
+            os.remove(video_path)
 
         except Exception as e:
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"❌ Постинг: {nickname}: Ошибка — {e}")
+            if video_path:
+                await bot.send_video(chat_id=chat_id, video=video_path)
+                os.remove(video_path)
             raise
 
         await asyncio.sleep(2)  # Хуманизация
