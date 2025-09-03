@@ -145,19 +145,20 @@ async def retry_step(step_func, retries=3, reload_page=None, step_name=""):
                 raise
 
 async def auth(nickname, password, proxy, token):
-    async with async_playwright() as p:
-        # Создаём user-agent
-        valid_versions = [f"chrome_{v}" for v in range(128, 134) if v != 132]
-        chosen_version = random.choice(valid_versions)
-        client = primp.Client(impersonate=chosen_version, impersonate_os="windows")
-        user_agent = client.headers["user-agent"]
+    video_path = None
+    try:
+        async with async_playwright() as p:
+            # Создаём user-agent
+            valid_versions = [f"chrome_{v}" for v in range(128, 134) if v != 132]
+            chosen_version = random.choice(valid_versions)
+            client = primp.Client(impersonate=chosen_version, impersonate_os="windows")
+            user_agent = client.headers["user-agent"]
 
-        # Генерируем TOTP
-        totp = pyotp.TOTP(token)
+            # Генерируем TOTP
+            totp = pyotp.TOTP(token)
 
-        browser, context, page, video_path = await create_page(p, proxy=proxy, session=None, user_agent=user_agent)
+            browser, context, page, video_path = await create_page(p, proxy=proxy, session=None, user_agent=user_agent)
 
-        try:
             # Заход на сайт
             await retry_step(lambda: page.goto("https://x.com/", timeout=60000),
                              reload_page=page, step_name="goto /")
@@ -209,106 +210,137 @@ async def auth(nickname, password, proxy, token):
                 "user_agent": user_agent,
                 "session": storage_state
             })
-        finally:
-            await browser.close()
-            return video_path
+    except Exception as e:
+        print(e)
+    finally:
+        await browser.close()
+        return video_path
 
 async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
-    async with async_playwright() as p:
-        browser, context, page, video_path = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
-        tweet_text = await rq.get_random_tweet(tg_id)
+    """
+    Асинхронная функция для публикации поста.
+    Всегда возвращает video_path, даже если произошла ошибка.
+    """
+    video_path = None
+    browser = None
+    context = None
 
-        community_choice = {0: lambda: False, 1: lambda: random.choice([True, False]), 2: lambda: True}[community]()
-        used_communities = []
-        if community_choice:
-            communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
-            community_url = random.choice(communities_urls)
-            await retry_step(lambda: page.goto(community_url, timeout=60000), reload_page=page, step_name='going to community')
-            while True:
-                await retry_step(lambda: page.locator("button", has_text=re.compile(r"^(Joined|Join)$")).wait_for(state="visible", timeout=60000), reload_page=page, step_name="Wait for Join/Joined button")
-                joined_button = page.locator("button", has_text="Joined")
-                is_joined = await joined_button.is_visible()
-                if is_joined:
-                    break
-                else:
-                    join_button = page.locator("button", has_text="Join")
-                    if await join_button.is_visible():
-                        await click_random(join_button)
-                        await asyncio.sleep(2)
-                        agree_button = page.get_by_role("button", name="Agree and join")
-                        sorry_button = page.get_by_text('Sorry, you can’t join right now')
-                        removed_button = page.get_by_text("You've been removed from this Community")
-                        if await agree_button.is_visible():
-                            await retry_step(
-                                lambda: agree_button.wait_for(state="visible", timeout=60000), reload_page=page,
-                                step_name="wait_agree_join"
-                            )
-                            await click_random(agree_button)
-                            await asyncio.sleep(1)
-                        elif await sorry_button.is_visible() or await removed_button.is_visible():
-                            used_communities.append(community_url)
-                            communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
-                            community_url = random.choice(communities_urls)
-                            await page.goto(community_url, timeout=60000)
-                            continue
-        else:
-            await retry_step(lambda: page.goto("https://x.com/home", timeout=60000), reload_page=page,
-                             step_name='going to home page')
-        await retry_step(
-            lambda: page.get_by_test_id("SideNav_NewTweet_Button").wait_for(state="visible", timeout=60000),
-            reload_page=None, step_name="wait_new_tweet_button"
-        )
-        await click_random(page.get_by_test_id("SideNav_NewTweet_Button"))
-        await asyncio.sleep(2)
+    try:
+        async with async_playwright() as p:
+            # создаём страницу и получаем video_path
+            browser, context, page, video_path = await create_page(
+                p, proxy=proxy, session=session, user_agent=user_agent
+            )
 
-    # шаг 4: ввести текст
+            tweet_text = await rq.get_random_tweet(tg_id)
 
-        tweet_box = page.get_by_role("textbox", name="Post text")
-        await retry_step(
-            lambda: tweet_box.wait_for(state="visible", timeout=60000), reload_page=None, step_name="wait_tweet_box"
-        )
-        await human_type(tweet_box, text=tweet_text)
+            # --- выбор комьюнити ---
+            community_choice = {0: False, 1: lambda: random.choice([True, False]), 2: True}[community]
+            if callable(community_choice):
+                community_choice = community_choice()
 
-        # шаг 5: загрузка медиа
-        if media:
-            media_path = choose_file(1)[-1]
-            random_number = random.randint(1000, 9999)
-            extension = os.path.splitext(media_path)[1].lower()
-            unique_media_path = os.path.join(TEMP_DIR, f"temporary_{random_number}{extension}")
-            unique_media(media_path, unique_media_path)
+            used_communities = []
 
-            await asyncio.sleep(3)
-            inputs = page.locator('input[type="file"][data-testid="fileInput"]')
             if community_choice:
-                await inputs.nth(0).set_input_files(unique_media_path)
+                communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
+                community_url = random.choice(communities_urls)
+                await retry_step(lambda: page.goto(community_url, timeout=60000), reload_page=page, step_name='going to community')
+
+                while True:
+                    await retry_step(lambda: page.locator("button", has_text=re.compile(r"^(Joined|Join)$")).wait_for(state="visible", timeout=60000),
+                                     reload_page=page, step_name="Wait for Join/Joined button")
+                    joined_button = page.locator("button", has_text="Joined")
+                    is_joined = await joined_button.is_visible()
+                    if is_joined:
+                        break
+                    else:
+                        join_button = page.locator("button", has_text="Join")
+                        if await join_button.is_visible():
+                            await click_random(join_button)
+                            await asyncio.sleep(2)
+                            agree_button = page.get_by_role("button", name="Agree and join")
+                            sorry_button = page.get_by_text('Sorry, you can’t join right now')
+                            removed_button = page.get_by_text("You've been removed from this Community")
+                            if await agree_button.is_visible():
+                                await retry_step(lambda: agree_button.wait_for(state="visible", timeout=60000),
+                                                 reload_page=page, step_name="wait_agree_join")
+                                await click_random(agree_button)
+                                await asyncio.sleep(1)
+                            elif await sorry_button.is_visible() or await removed_button.is_visible():
+                                used_communities.append(community_url)
+                                communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
+                                community_url = random.choice(communities_urls)
+                                await page.goto(community_url, timeout=60000)
+                                continue
             else:
-                await inputs.nth(1).set_input_files(unique_media_path)
+                await retry_step(lambda: page.goto("https://x.com/home", timeout=60000),
+                                 reload_page=page, step_name='going to home page')
 
-            os.remove(unique_media_path)
-            await asyncio.sleep(3)
+            # --- ввод текста ---
+            await retry_step(lambda: page.get_by_test_id("SideNav_NewTweet_Button").wait_for(state="visible", timeout=60000),
+                             reload_page=None, step_name="wait_new_tweet_button")
+            await click_random(page.get_by_test_id("SideNav_NewTweet_Button"))
+            await asyncio.sleep(2)
 
-        # шаг 6: отправка поста
-        await click_random(page.get_by_test_id("tweetButton"))
-        await retry_step(
-            lambda: page.get_by_text("Your post was sent", exact=False).wait_for(state="visible", timeout=60000), reload_page=page, step_name="wait_post_sent"
-        )
+            tweet_box = page.get_by_role("textbox", name="Post text")
+            await retry_step(lambda: tweet_box.wait_for(state="visible", timeout=60000),
+                             reload_page=None, step_name="wait_tweet_box")
+            await human_type(tweet_box, text=tweet_text)
 
-        await context.close()
-        await browser.close()
+            # --- загрузка медиа ---
+            if media:
+                media_path = choose_file(1)[-1]
+                random_number = random.randint(1000, 9999)
+                extension = os.path.splitext(media_path)[1].lower()
+                unique_media_path = os.path.join(TEMP_DIR, f"temporary_{random_number}{extension}")
+                unique_media(media_path, unique_media_path)
 
+                await asyncio.sleep(3)
+                inputs = page.locator('input[type="file"][data-testid="fileInput"]')
+                if community_choice:
+                    await inputs.nth(0).set_input_files(unique_media_path)
+                else:
+                    await inputs.nth(1).set_input_files(unique_media_path)
+
+                os.remove(unique_media_path)
+                await asyncio.sleep(3)
+
+            # --- отправка поста ---
+            await click_random(page.get_by_test_id("tweetButton"))
+            await retry_step(lambda: page.get_by_text("Your post was sent", exact=False).wait_for(state="visible", timeout=60000),
+                             reload_page=page, step_name="wait_post_sent")
+
+    except Exception as e:
+        # логируем ошибку, но не прерываем возврат video_path
+        print(f"[post()] Произошла ошибка: {e}")
+
+    finally:
+        # безопасное закрытие ресурсов
+        if context:
+            try:
+                await context.close()
+            except Exception as e:
+                print(f"Ошибка при закрытии context: {e}")
+        if browser:
+            try:
+                await browser.close()
+            except Exception as e:
+                print(f"Ошибка при закрытии browser: {e}")
+
+    # возвращаем video_path даже если была ошибка
     return video_path
+
 
 async def parsing(proxy, session, user_agent, tg_id, links):
     tweet_count = 0
     video_path = None
-    result = None
-
-    for link in links:
+    try:
         async with async_playwright() as p:
-            browser = None
-            try:
-                browser, context, page, video_path = await create_page(p, proxy=proxy, session=session, user_agent=user_agent)
-
+            # создаём страницу; даже если create_page упадёт, video_path уже есть
+            browser, context, page, video_path = await create_page(
+                p, proxy=proxy, session=session, user_agent=user_agent
+            )
+            for link in links:
                 # Заходим на страницу
                 await retry_step(lambda: page.goto(link, timeout=60000),
                                  reload_page=page, step_name=f"goto {link}")
@@ -340,13 +372,22 @@ async def parsing(proxy, session, user_agent, tg_id, links):
                     last_height = new_height
 
                 tweet_count += await rq.save_user_tweets(tg_id, list(collected))
-                result = f"✅ Записано {tweet_count} уникальных твитов"
 
-            except Exception:
-                raise
-            finally:
-                if browser:
-                    await browser.close()
+    except Exception as e:
+        print(video_path, e, sep='\n\n')
+    finally:
+        tweet_count = len(tweet_count)
+        # безопасное закрытие
+        if context:
+            try:
+                await context.close()
+            except Exception as e:
+                print(f"Ошибка при закрытии context: {e}")
+        if browser:
+            try:
+                await browser.close()
+            except Exception as e:
+                print(f"Ошибка при закрытии browser: {e}")
 
-    return video_path
-
+# возвращаем video_path всегда, даже если были ошибки
+    return video_path, tweet_count

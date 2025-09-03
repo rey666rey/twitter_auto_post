@@ -38,10 +38,9 @@ async def work_parsing_only(tg_id: int, bot: Bot, chat_id: int, message_id: int,
 
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                     text=f"⚡️ Идет парсинг")
-        video_path = await tweet.parsing(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, links=links)
-        result = await rq.get_saved_tweets(tg_id)
+        video_path, tweet_count = await tweet.parsing(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, links=links)
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                    text=f"✅ Записано {len(result)} уникальных твитов")
+                                    text=f"✅ Записано {tweet_count} уникальных твитов")
     except Exception as e:
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                     text=f"❌ Парсинг: {nickname}: Ошибка — {e}")

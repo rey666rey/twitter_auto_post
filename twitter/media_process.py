@@ -90,7 +90,8 @@ import subprocess
 def convert_to_mp4_ffmpeg(input_path: str):
     """
     Конвертация видео в mp4 через ffmpeg.
-    Имя выходного файла будет как у входного, но с расширением .mp4
+    Имя выходного файла будет как у входного, но с расширением .mp4.
+    После успешной конвертации удаляет исходный файл.
     """
     try:
         base, _ = os.path.splitext(input_path)
@@ -103,8 +104,15 @@ def convert_to_mp4_ffmpeg(input_path: str):
             output_path
         ]
         subprocess.run(command, check=True)
+
+        # удаляем исходный файл только если конвертация прошла успешно
+        if os.path.exists(output_path):
+            os.remove(input_path)
+            print(f"Исходный файл удалён: {input_path}")
+
         print(f"Видео успешно сохранено: {output_path}")
         return output_path
+
     except subprocess.CalledProcessError as e:
         print(f"Ошибка при конвертации: {e}")
         return None
