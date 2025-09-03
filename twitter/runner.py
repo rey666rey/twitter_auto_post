@@ -85,15 +85,15 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
             video_path = await tweet.post(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, community = community_status, media = media_status)
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"Постинг: ✅ {nickname}: Пост отправлен")
-            os.remove(video_path)
-
         except Exception as e:
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                         text=f"❌ Постинг: {nickname}: Ошибка — {e}")
             if video_path:
                 await bot.send_video(chat_id=chat_id, video=video_path)
                 os.remove(video_path)
-            raise
+                raise
+        finally:
+            os.remove(video_path)
 
         await asyncio.sleep(2)  # Хуманизация
 

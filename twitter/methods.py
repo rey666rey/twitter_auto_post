@@ -105,7 +105,7 @@ async def create_page(p, proxy, session, user_agent: str):
         user_agent=user_agent,
         locale="en-US",
         viewport={"width": 1280, "height": 800},
-        record_video_dir=os.path.join(TEMP_DIR),
+        record_video_dir=TEMP_DIR,
         record_video_size={"width": 640, "height": 480},
         storage_state=session
     )
