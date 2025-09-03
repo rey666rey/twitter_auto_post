@@ -9,7 +9,7 @@ import re
 from patchright.async_api import TimeoutError as PlaywrightTimeoutError
 from urllib.parse import urlparse
 from config import TEMP_DIR
-from twitter.media_process import choose_file, unique_media
+from twitter.media_process import choose_file, unique_media, convert_to_mp4_ffmpeg
 import app.database.requests as rq
 
 from dotenv import load_dotenv
@@ -122,6 +122,7 @@ async def create_page(p, proxy, session, user_agent: str):
 
     page = await context.new_page()
     video_path = await page.video.path()
+    video_path = convert_to_mp4_ffmpeg(video_path)
 
     return browser, context, page, video_path
 

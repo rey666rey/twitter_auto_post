@@ -83,3 +83,28 @@ def unique_media(input_path: str, output_path: str) -> str:
     subprocess.run(cmd, check=True)
     print(f"✅ Media saved to: {output_path}")
     return str(output_path)
+
+import os
+import subprocess
+
+def convert_to_mp4_ffmpeg(input_path: str):
+    """
+    Конвертация видео в mp4 через ffmpeg.
+    Имя выходного файла будет как у входного, но с расширением .mp4
+    """
+    try:
+        base, _ = os.path.splitext(input_path)
+        output_path = f"{base}.mp4"
+
+        command = [
+            "ffmpeg", "-i", input_path,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-c:a", "aac", "-b:a", "192k",
+            output_path
+        ]
+        subprocess.run(command, check=True)
+        print(f"Видео успешно сохранено: {output_path}")
+        return output_path
+    except subprocess.CalledProcessError as e:
+        print(f"Ошибка при конвертации: {e}")
+        return None
