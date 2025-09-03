@@ -55,46 +55,102 @@ async def work_parsing_only(tg_id: int, bot: Bot, chat_id: int, message_id: int,
 
 async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int):
     accounts = await rq.get_user_accounts(tg_id)
-    video_path = None
     if not accounts:
-        await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                    text="Постинг: ⚠️ Нет аккаунтов для постинга")
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text="Постинг: ⚠️ Нет аккаунтов для постинга"
+        )
         return
+
     for account in accounts:
         nickname = account.nickname
+        video_path = None
+
         try:
+            # Логинимся, если нет сессии
             if not account.session:
-                await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                            text=f"✨ Постинг: {nickname}: логиним")
-                video_path = await tweet.auth(account.nickname, account.password, account.proxy, account.token)
+                await bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id,
+                    text=f"✨ Постинг: {nickname}: логиним"
+                )
+                video_path, login_error = await tweet.auth(
+                    account.nickname, account.password, account.proxy, account.token
+                )
                 # Обновляем данные после логина
                 account = await rq.get_account_by_nickname(account.nickname)
-                await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                            text=f"Постинг: ✅ {nickname}: Успешный вход")
-                os.remove(video_path)
+                await bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id,
+                    text=f"Постинг: ✅ {nickname}: Успешный вход"
+                )
+                if video_path:
+                    os.remove(video_path)
             else:
-                await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                            text=f"Постинг: ℹ️ {nickname}: Уже залогинен")
+                await bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id,
+                    text=f"Постинг: ℹ️ {nickname}: Уже залогинен"
+                )
                 await asyncio.sleep(2)
+
+            # Настройки пользователя
             settings = await rq.get_user_settings(tg_id)
             community_status = settings.get('posting', {}).get('community_posting')
             media_status = settings.get('posting', {}).get('media')
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"⚡️{nickname}: Идет постинг")
-            video_path = await tweet.post(tg_id=tg_id, proxy=account.proxy, session=account.session, user_agent=account.user_agent, community = community_status, media = media_status)
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"Постинг: ✅ {nickname}: Пост отправлен")
+
+            await bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id,
+                text=f"⚡️{nickname}: Идет постинг"
+            )
+
+            # Публикация поста
+            video_path, post_error = await tweet.post(
+                tg_id=tg_id,
+                proxy=account.proxy,
+                session=account.session,
+                user_agent=account.user_agent,
+                community=community_status,
+                media=media_status
+            )
+
+            # Проверяем, была ли ошибка при постинге
+            if post_error:
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"❌ Постинг: {nickname}: Ошибка — {post_error}"
+                )
+                if video_path:
+                    await bot.send_video(chat_id=chat_id, video=video_path)
+                    os.remove(video_path)
+                continue  # переходим к следующему аккаунту
+
+            # Если ошибок нет
+            await bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id,
+                text=f"Постинг: ✅ {nickname}: Пост отправлен"
+            )
+
         except Exception as e:
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
-                                        text=f"❌ Постинг: {nickname}: Ошибка — {e}")
+            # Любая непредвиденная ошибка
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=f"❌ Постинг: {nickname}: Ошибка — {e}"
+            )
             if video_path:
                 await bot.send_video(chat_id=chat_id, video=video_path)
                 os.remove(video_path)
-                raise
+
         finally:
-            os.remove(video_path)
+            # Безопасное удаление видео, если оно ещё осталось
+            if video_path and os.path.exists(video_path):
+                try:
+                    os.remove(video_path)
+                except Exception:
+                    pass
 
         await asyncio.sleep(2)  # Хуманизация
+
 
 async def task_worker(tg_id: int, bot: Bot, chat_id: int, queue: asyncio.Queue, messages_to_delete):
     tasks = []

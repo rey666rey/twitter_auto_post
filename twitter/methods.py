@@ -219,7 +219,8 @@ async def auth(nickname, password, proxy, token):
 async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     """
     Асинхронная функция для публикации поста.
-    Всегда возвращает video_path, даже если произошла ошибка.
+    Возвращает кортеж (video_path, error) только в случае ошибки.
+    Если ошибок нет, возвращает (None, None).
     """
     video_path = None
     browser = None
@@ -310,25 +311,27 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
             await retry_step(lambda: page.get_by_text("Your post was sent", exact=False).wait_for(state="visible", timeout=60000),
                              reload_page=page, step_name="wait_post_sent")
 
-    except Exception as e:
-        # логируем ошибку, но не прерываем возврат video_path
-        print(f"[post()] Произошла ошибка: {e}")
+            # если ошибок нет — возвращаем None
+            return None, None
 
-    finally:
-        # безопасное закрытие ресурсов
+    except Exception as e:
+        # если ошибка — закрываем ресурсы и возвращаем video + текст ошибки
+        error_text = str(e)
+
         if context:
             try:
                 await context.close()
-            except Exception as e:
-                print(f"Ошибка при закрытии context: {e}")
+            except Exception as e2:
+                print(f"Ошибка при закрытии context: {e2}")
         if browser:
             try:
                 await browser.close()
-            except Exception as e:
-                print(f"Ошибка при закрытии browser: {e}")
+            except Exception as e2:
+                print(f"Ошибка при закрытии browser: {e2}")
 
-    # возвращаем video_path даже если была ошибка
-    return video_path
+        # возвращаем видео и текст ошибки
+        return video_path, error_text
+
 
 
 async def parsing(proxy, session, user_agent, tg_id, links):
