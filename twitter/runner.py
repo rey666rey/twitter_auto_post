@@ -112,18 +112,11 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
                 community=community_status,
                 media=media_status
             )
-            await asyncio.sleep(30)
             # Проверяем, была ли ошибка при постинге
             if post_error:
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=f"❌ Постинг: {nickname}: Ошибка — {post_error}"
-                )
-                await asyncio.sleep(30)
                 if video_path:
                     video = FSInputFile(video_path)
-                    await bot.send_document(chat_id=chat_id, document=video)
+                    await bot.send_document(chat_id=chat_id, document=video, caption='❌ Постинг: {nickname}: Ошибка — {post_error}')
                     os.remove(video_path)
                 continue  # переходим к следующему аккаунту
 
@@ -134,24 +127,14 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
             )
 
         except Exception as e:
-            # Любая непредвиденная ошибка
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=f"❌ Постинг: {nickname}: Ошибка — {e}"
-            )
-            await asyncio.sleep(30)
             if video_path:
                 video = FSInputFile(video_path)
-                await bot.send_document(chat_id=chat_id, document=video)
+                await bot.send_document(chat_id=chat_id, document=video, caption=f"❌ Постинг: {nickname}: Ошибка — {e}")
                 os.remove(video_path)
         finally:
             # Безопасное удаление видео, если оно ещё осталось
             if video_path and os.path.exists(video_path):
-                try:
-                    os.remove(video_path)
-                except Exception:
-                    pass
+                os.remove(video_path)
 
         await asyncio.sleep(2)  # Хуманизация
 
