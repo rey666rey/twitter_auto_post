@@ -167,8 +167,6 @@ async def task_worker(tg_id: int, bot: Bot, chat_id: int, queue: asyncio.Queue, 
                     except Exception as e:
                         print(f"⚠️ Ошибка в {task.name}: {e}")
                         tasks_to_remove.append(item)  # Отмечаем задачу для удаления
-                        start_msg_id = messages_to_delete[-1]
-                        await bot.delete_message(chat_id, start_msg_id)
                         continue  # Переходим к следующей задаче
                     else:
                         item['last_run'] = int(time.time())
