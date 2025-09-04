@@ -122,7 +122,6 @@ async def create_page(p, proxy, session, user_agent: str):
 
     page = await context.new_page()
     video_path = await page.video.path()
-    video_path = convert_to_mp4_ffmpeg(video_path)
 
     return browser, context, page, video_path
 

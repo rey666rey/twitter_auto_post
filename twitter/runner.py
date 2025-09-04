@@ -3,6 +3,7 @@ import os
 import app.database.requests as rq
 import twitter.methods as tweet
 from aiogram import Bot
+from aiogram.types import FSInputFile
 from typing import Callable, Optional
 import time
 
@@ -45,7 +46,7 @@ async def work_parsing_only(tg_id: int, bot: Bot, chat_id: int, message_id: int,
         await bot.edit_message_text(chat_id=chat_id, message_id=message_id,
                                     text=f"❌ Парсинг: {nickname}: Ошибка — {e}")
         if video_path:
-            await bot.send_video(chat_id=chat_id, video=video_path)
+            await bot.send_document(chat_id=chat_id, document=video_path)
             os.remove(video_path)
         raise
     finally:
@@ -111,7 +112,7 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
                 community=community_status,
                 media=media_status
             )
-
+            await asyncio.sleep(30)
             # Проверяем, была ли ошибка при постинге
             if post_error:
                 await bot.edit_message_text(
@@ -119,8 +120,10 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
                     message_id=message_id,
                     text=f"❌ Постинг: {nickname}: Ошибка — {post_error}"
                 )
+                await asyncio.sleep(30)
                 if video_path:
-                    await bot.send_video(chat_id=chat_id, video=video_path)
+                    video = FSInputFile(video_path)
+                    await bot.send_document(chat_id=chat_id, document=video)
                     os.remove(video_path)
                 continue  # переходим к следующему аккаунту
 
@@ -137,10 +140,11 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
                 message_id=message_id,
                 text=f"❌ Постинг: {nickname}: Ошибка — {e}"
             )
+            await asyncio.sleep(30)
             if video_path:
-                await bot.send_video(chat_id=chat_id, video=video_path)
+                video = FSInputFile(video_path)
+                await bot.send_document(chat_id=chat_id, document=video)
                 os.remove(video_path)
-
         finally:
             # Безопасное удаление видео, если оно ещё осталось
             if video_path and os.path.exists(video_path):
@@ -150,7 +154,6 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
                     pass
 
         await asyncio.sleep(2)  # Хуманизация
-
 
 async def task_worker(tg_id: int, bot: Bot, chat_id: int, queue: asyncio.Queue, messages_to_delete):
     tasks = []
