@@ -260,7 +260,7 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
                             await asyncio.sleep(2)
                             agree_button = page.get_by_role("button", name="Agree and join")
                             sorry_button = page.get_by_text('Sorry, you can’t join right now')
-                            removed_button = page.get_by_text("You've been removed from this Community")
+                            removed_button = page.get_by_text("You’ve been removed from this Community")
                             if await agree_button.is_visible():
                                 await retry_step(lambda: agree_button.wait_for(state="visible", timeout=60000),
                                                  reload_page=page, step_name="wait_agree_join")
@@ -330,6 +330,9 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
 
         # возвращаем видео и текст ошибки
         return video_path, error_text
+    finally:
+        if video_path and os.path.exists(video_path):
+            os.remove(video_path)
 
 
 

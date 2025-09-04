@@ -127,10 +127,9 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
             )
 
         except Exception as e:
-            if video_path:
-                video = FSInputFile(video_path)
-                await bot.send_document(chat_id=chat_id, document=video, caption=f"❌ Постинг: {nickname}: Ошибка — {e}")
-                os.remove(video_path)
+            video = FSInputFile(video_path)
+            await bot.send_document(chat_id=chat_id, document=video, caption=f"❌ Постинг: {nickname}: Ошибка — {e}")
+            os.remove(video_path)
         finally:
             # Безопасное удаление видео, если оно ещё осталось
             if video_path and os.path.exists(video_path):
