@@ -133,14 +133,23 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
             )
 
         except Exception as e:
-            video = FSInputFile(video_path)
-            await bot.send_document(chat_id=chat_id, document=video, caption=f"❌ Постинг: {nickname}: Ошибка — {e}")
-        finally:
-            # Безопасное удаление видео, если оно ещё осталось
             if video_path and os.path.exists(video_path):
-                os.remove(video_path)
+                video = FSInputFile(video_path)
+                await bot.send_document(
+                    chat_id=chat_id,
+                    document=video,
+                    caption=f"❌ Постинг: {nickname}: Ошибка — {e}"
 
-        await asyncio.sleep(2)  # Хуманизация
+                )
+            else:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"❌ Постинг: {nickname}: Ошибка — {e}"
+                )
+        finally:
+                # Безопасное удаление видео, если оно ещё осталось
+                if video_path and os.path.exists(video_path):
+                    os.remove(video_path)
 
 async def task_worker(tg_id: int, bot: Bot, chat_id: int, queue: asyncio.Queue, messages_to_delete):
     tasks = []
