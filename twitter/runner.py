@@ -122,7 +122,7 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
             if post_error:
                 if video_path:
                     video = FSInputFile(video_path)
-                    await bot.send_document(chat_id=chat_id, document=video, caption='❌ Постинг: {nickname}: Ошибка — {post_error}')
+                    await bot.send_document(chat_id=chat_id, document=video, caption=f'❌ Постинг: {nickname}: Ошибка — {post_error}')
                     os.remove(video_path)
                 continue  # переходим к следующему аккаунту
 

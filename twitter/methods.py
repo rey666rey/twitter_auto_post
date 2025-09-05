@@ -249,6 +249,11 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
                 communities_urls = [c for c in await rq.get_user_communities(tg_id=tg_id) if c not in used_communities]
                 community_url = random.choice(communities_urls)
                 await retry_step(lambda: page.goto(community_url, timeout=60000), reload_page=page, step_name='going to community')
+                welcome_to_community = page.get_by_text('Welcome to Communities')
+
+                await asyncio.sleep(5)
+                if await welcome_to_community.is_visible():
+                    await click_random(page.get_by_role("button", name="Check it out"))
 
                 while True:
                     await retry_step(lambda: page.locator("button", has_text=re.compile(r"^(Joined|Join)$")).wait_for(state="visible", timeout=60000),
