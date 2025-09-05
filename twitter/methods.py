@@ -209,14 +209,15 @@ async def auth(nickname, password, proxy, token):
                 "user_agent": user_agent,
                 "session": storage_state
             })
+
+            await context.close()
+            await browser.close()
+
             return None, None
 
     except Exception as e:
         # если ошибка — закрываем ресурсы и возвращаем video + текст ошибки
         error_text = str(e)
-
-        await context.close()
-        await browser.close()
 
         # возвращаем видео и текст ошибки
         return video_path, error_text
@@ -228,9 +229,6 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     Если ошибок нет, возвращает (None, None).
     """
     video_path = None
-    browser = None
-    context = None
-
     try:
         async with async_playwright() as p:
             # создаём страницу и получаем video_path
@@ -315,6 +313,8 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
             await click_random(page.get_by_test_id("tweetButton"))
             await retry_step(lambda: page.get_by_text("Your post was sent", exact=False).wait_for(state="visible", timeout=60000),
                              reload_page=page, step_name="wait_post_sent")
+            await context.close()
+            await browser.close()
 
             # если ошибок нет — возвращаем None
             return None, None
@@ -322,10 +322,6 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     except Exception as e:
         # если ошибка — закрываем ресурсы и возвращаем video + текст ошибки
         error_text = str(e)
-
-        await context.close()
-        await browser.close()
-
         # возвращаем видео и текст ошибки
         return video_path, error_text
 
@@ -371,22 +367,13 @@ async def parsing(proxy, session, user_agent, tg_id, links):
                     last_height = new_height
 
                 tweet_count += await rq.save_user_tweets(tg_id, list(collected))
+                await context.close()
+                await browser.close()
 
     except Exception as e:
-        print(video_path, e, sep='\n\n')
-    finally:
-        tweet_count = len(tweet_count)
-        # безопасное закрытие
-        if context:
-            try:
-                await context.close()
-            except Exception as e:
-                print(f"Ошибка при закрытии context: {e}")
-        if browser:
-            try:
-                await browser.close()
-            except Exception as e:
-                print(f"Ошибка при закрытии browser: {e}")
+        error_text = str(e)
+        # возвращаем видео и текст ошибки
+        return video_path, error_text
 
 # возвращаем video_path всегда, даже если были ошибки
     return video_path, tweet_count
