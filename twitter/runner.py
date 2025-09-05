@@ -78,14 +78,20 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
                 video_path, login_error = await tweet.auth(
                     account.nickname, account.password, account.proxy, account.token
                 )
+                if login_error:
+                    if video_path:
+                        video = FSInputFile(video_path)
+                        await bot.send_document(chat_id=chat_id, document=video,
+                                                caption='❌ Постинг: {nickname}: Ошибка — {post_error}')
+                        os.remove(video_path)
+                        continue
                 # Обновляем данные после логина
                 account = await rq.get_account_by_nickname(account.nickname)
                 await bot.edit_message_text(
                     chat_id=chat_id, message_id=message_id,
                     text=f"Постинг: ✅ {nickname}: Успешный вход"
                 )
-                if video_path:
-                    os.remove(video_path)
+
             else:
                 await bot.edit_message_text(
                     chat_id=chat_id, message_id=message_id,
@@ -129,7 +135,6 @@ async def work_posting_only(tg_id: int, bot: Bot, chat_id: int, message_id: int)
         except Exception as e:
             video = FSInputFile(video_path)
             await bot.send_document(chat_id=chat_id, document=video, caption=f"❌ Постинг: {nickname}: Ошибка — {e}")
-            os.remove(video_path)
         finally:
             # Безопасное удаление видео, если оно ещё осталось
             if video_path and os.path.exists(video_path):
@@ -165,7 +170,10 @@ async def task_worker(tg_id: int, bot: Bot, chat_id: int, queue: asyncio.Queue, 
                         print(f"🚀 Запуск задачи: {task.name}")
                         result_text = await task.func(tg_id, bot, chat_id, task.message_id)
                     except Exception as e:
-                        print(f"⚠️ Ошибка в {task.name}: {e}")
+                        await bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=task.message_id,
+                            text=f"⚠️ Ошибка в {task.name}: {e}")
                         tasks_to_remove.append(item)  # Отмечаем задачу для удаления
                         continue  # Переходим к следующей задаче
                     else:

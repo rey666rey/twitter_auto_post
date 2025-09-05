@@ -9,7 +9,7 @@ import re
 from patchright.async_api import TimeoutError as PlaywrightTimeoutError
 from urllib.parse import urlparse
 from config import TEMP_DIR
-from twitter.media_process import choose_file, unique_media, convert_to_mp4_ffmpeg
+from twitter.media_process import choose_file, unique_media
 import app.database.requests as rq
 
 from dotenv import load_dotenv
@@ -209,11 +209,20 @@ async def auth(nickname, password, proxy, token):
                 "user_agent": user_agent,
                 "session": storage_state
             })
+            return None, None
+
     except Exception as e:
-        print(e)
-    finally:
+        # если ошибка — закрываем ресурсы и возвращаем video + текст ошибки
+        error_text = str(e)
+
+        await context.close()
         await browser.close()
-        return video_path
+
+        # возвращаем видео и текст ошибки
+        return video_path, error_text
+    finally:
+        if video_path and os.path.exists(video_path):
+            os.remove(video_path)
 
 async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     """
@@ -317,16 +326,8 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
         # если ошибка — закрываем ресурсы и возвращаем video + текст ошибки
         error_text = str(e)
 
-        if context:
-            try:
-                await context.close()
-            except Exception as e2:
-                print(f"Ошибка при закрытии context: {e2}")
-        if browser:
-            try:
-                await browser.close()
-            except Exception as e2:
-                print(f"Ошибка при закрытии browser: {e2}")
+        await context.close()
+        await browser.close()
 
         # возвращаем видео и текст ошибки
         return video_path, error_text
