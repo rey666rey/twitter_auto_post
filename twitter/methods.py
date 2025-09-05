@@ -220,9 +220,6 @@ async def auth(nickname, password, proxy, token):
 
         # возвращаем видео и текст ошибки
         return video_path, error_text
-    finally:
-        if video_path and os.path.exists(video_path):
-            os.remove(video_path)
 
 async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
     """
@@ -331,10 +328,6 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
 
         # возвращаем видео и текст ошибки
         return video_path, error_text
-    finally:
-        if video_path and os.path.exists(video_path):
-            os.remove(video_path)
-
 
 
 async def parsing(proxy, session, user_agent, tg_id, links):
