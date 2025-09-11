@@ -2,7 +2,6 @@
 __pycache__
 content
 .idea
-ca.crt
 twitter/chromedriver
 twitter/db.sqlite3
 db.sqlite3
@@ -10,9 +9,6 @@ db.sqlite3
 app/.DS_Store
 twitter/.DS_Store
 temp
-test_browser.py
 screenshot.png
 .env
-video
-communities.txt
-tweet.txt
+keys

@@ -318,6 +318,7 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
             await click_random(page.get_by_test_id("tweetButton"))
             await retry_step(lambda: page.get_by_text("Your post was sent", exact=False).wait_for(state="visible", timeout=60000),
                              reload_page=page, step_name="wait_post_sent")
+            unlock_more = page.get_by_text("You've unlocked more on X")
             await context.close()
             await browser.close()
 
@@ -329,7 +330,6 @@ async def post(tg_id, proxy, session, user_agent, community: int, media: bool):
         error_text = str(e)
         # возвращаем видео и текст ошибки
         return video_path, error_text
-
 
 async def parsing(proxy, session, user_agent, tg_id, links):
     tweet_count = 0
